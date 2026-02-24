@@ -15,9 +15,9 @@ const Banner = () => {
 
     useEffect(() => {
         setBannerData([
-            require("../assets/images/carousel1-sample.png"),
-            require("../assets/images/carousel2-sample.png"),
-            require("../assets/images/carousel3-sample.png"),
+            require("../assets/images/featured1.jpg"),
+            require("../assets/images/featured2.jpg"),
+            require("../assets/images/featured3.jpg"),
         ]);
         return () => setBannerData([]);
     }, []);
