@@ -147,8 +147,9 @@ router.post("/", authJwt, upload.single("image"), async (req, res) => {
     const populated = await product.populate("category", "id name color");
     await updateStockAlerts(product);
     return res.status(201).json(populated);
-  } catch (_error) {
-    return res.status(500).json({ message: "Failed to create product" });
+  } catch (error) {
+    console.error('[POST /products] Error:', error.message, error.stack);
+    return res.status(500).json({ message: "Failed to create product", error: error.message });
   }
 });
 

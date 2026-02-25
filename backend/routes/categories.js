@@ -20,16 +20,27 @@ router.post("/", authJwt, async (req, res) => {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
+
     const { name, color, icon } = req.body;
     if (!name) {
       return res.status(400).json({ message: "Category name is required" });
     }
-    const category = await Category.create({ name: String(name).trim(), color, icon });
+
+    const category = await Category.create({
+      name: String(name).trim(),
+      color,
+      icon,
+    });
+
     return res.status(201).json(category);
   } catch (error) {
+    // 👇 PUT IT HERE
+    console.log("CATEGORY ERROR:", error);
+
     if (error.code === 11000) {
       return res.status(409).json({ message: "Category already exists" });
     }
+
     return res.status(500).json({ message: "Failed to create category" });
   }
 });

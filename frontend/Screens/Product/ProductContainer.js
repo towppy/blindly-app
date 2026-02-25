@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, StyleSheet, Dimensions, ScrollView, Text } from "react-native";
+import { View, ScrollView, Text, Dimensions } from "react-native";
 import { Surface, Searchbar } from "react-native-paper";
 import ProductList from "./ProductList";
 import SearchedProduct from "./SearchedProduct";
@@ -9,7 +9,10 @@ import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
 import { useFocusEffect } from "@react-navigation/native";
 
-var { height, width } = Dimensions.get("window");
+// style
+import ProductContainerStyles from "../../Shared/Product/ProductContainer.styles";
+
+const { height } = Dimensions.get("window");
 
 const ProductContainer = () => {
     const [products, setProducts] = useState([]);
@@ -36,7 +39,11 @@ const ProductContainer = () => {
             setActive(true);
         } else {
             setProductsCtg(
-                products.filter((i) => i.category != null && (i.category.id === ctg || i.category._id === ctg))
+                products.filter(
+                    (i) =>
+                        i.category != null &&
+                        (i.category.id === ctg || i.category._id === ctg)
+                )
             );
             setActive(true);
         }
@@ -46,6 +53,7 @@ const ProductContainer = () => {
         useCallback(() => {
             setFocus(false);
             setActive(-1);
+
             axios
                 .get(`${baseURL}products`)
                 .then((res) => {
@@ -54,12 +62,12 @@ const ProductContainer = () => {
                     setProductsCtg(res.data);
                     setInitialState(res.data);
                 })
-                .catch((error) => console.log("Api call error"));
+                .catch(() => console.log("Api call error"));
 
             axios
                 .get(`${baseURL}categories`)
                 .then((res) => setCategories(res.data))
-                .catch((error) => console.log("Api categories call error"));
+                .catch(() => console.log("Api categories call error"));
 
             return () => {
                 setProducts([]);
@@ -82,30 +90,33 @@ const ProductContainer = () => {
                 value={keyword}
                 onClearIconPress={onBlur}
             />
-            {focus === true ? (
+
+            {focus ? (
                 <SearchedProduct productsFiltered={productsFiltered} />
             ) : (
                 <ScrollView>
-                    <View>
-                        <Banner />
-                    </View>
-                    <View>
-                        <CategoryFilter
-                            categories={categories}
-                            categoryFilter={changeCtg}
-                            productsCtg={productsCtg}
-                            active={active}
-                            setActive={setActive}
-                        />
-                    </View>
+                    <Banner />
+                    <CategoryFilter
+                        categories={categories}
+                        categoryFilter={changeCtg}
+                        productsCtg={productsCtg}
+                        active={active}
+                        setActive={setActive}
+                    />
+
                     {productsCtg.length > 0 ? (
-                        <View style={styles.listContainer}>
+                        <View style={ProductContainerStyles.styles.listContainer}>
                             {productsCtg.map((item) => (
                                 <ProductList key={item.id || item._id} item={item} />
                             ))}
                         </View>
                     ) : (
-                        <View style={[styles.center, { height: height / 2 }]}>
+                        <View
+                            style={[
+                                ProductContainerStyles.styles.center,
+                                { height: height / 2 },
+                            ]}
+                        >
                             <Text>No products found</Text>
                         </View>
                     )}
@@ -114,20 +125,5 @@ const ProductContainer = () => {
         </Surface>
     );
 };
-
-const styles = StyleSheet.create({
-    listContainer: {
-        height: height,
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "flex-start",
-        flexWrap: "wrap",
-        backgroundColor: "gainsboro",
-    },
-    center: {
-        justifyContent: "center",
-        alignItems: "center",
-    },
-});
 
 export default ProductContainer;

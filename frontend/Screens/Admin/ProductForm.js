@@ -92,6 +92,8 @@ const ProductForm = (props) => {
             setError("Please fill in the form correctly");
             return;
         }
+        // Debug log for category
+        console.log("Submitting product with category:", category);
         setIsSubmitting(true);
         const formData = new FormData();
         formData.append("name", name);
