@@ -1,45 +1,18 @@
 const express = require("express");
-const path = require("path");
-const fs = require("fs");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const multer = require("multer");
 
 const config = require("../config");
 const authJwt = require("../middleware/authJwt");
 const User = require("../models/User");
+const upload = require("../helpers/upload");
 
 const router = express.Router();
-
-const uploadPath = path.resolve(process.cwd(), config.uploadDir);
-fs.mkdirSync(uploadPath, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadPath),
-  filename: (_req, file, cb) => {
-    const safeBase = path
-      .parse(file.originalname)
-      .name.replace(/[^a-zA-Z0-9-_]/g, "_")
-      .slice(0, 50);
-    const ext = path.extname(file.originalname) || ".jpg";
-    cb(null, `${Date.now()}-${safeBase}${ext}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: config.maxFileSizeMb * 1024 * 1024 },
-});
 
 function toBoolean(value) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") return value.toLowerCase() === "true";
   return false;
-}
-
-function buildImageUrl(req, filename) {
-  if (!filename) return "";
-  return `${req.protocol}://${req.get("host")}/${config.uploadDir}/${filename}`;
 }
 
 router.post("/register", upload.single("image"), async (req, res) => {
@@ -58,7 +31,7 @@ router.post("/register", upload.single("image"), async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(String(password), 10);
-    const image = req.file ? buildImageUrl(req, req.file.filename) : "";
+    const image = req.file ? req.file.path : "";
 
     const user = await User.create({
       name: String(name).trim(),
@@ -107,27 +80,6 @@ router.post("/login", async (req, res) => {
     return res.status(200).json({ token, user: payload });
   } catch (_error) {
     return res.status(500).json({ message: "Failed to login" });
-  }
-});
-
-router.get("/:id", authJwt, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const requesterId = req.user?.userId;
-    const requesterIsAdmin = req.user?.isAdmin === true;
-
-    if (!requesterIsAdmin && requesterId !== id) {
-      return res.status(403).json({ message: "Forbidden" });
-    }
-
-    const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    return res.status(200).json(user.toJSON());
-  } catch (_error) {
-    return res.status(500).json({ message: "Failed to load user profile" });
   }
 });
 
@@ -196,6 +148,31 @@ router.put("/profile", authJwt, async (req, res) => {
   }
 });
 
+router.put("/profile-photo", authJwt, upload.single("image"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Image file is required" });
+    }
+
+    const image = req.file.path;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { image },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json(user.toJSON());
+
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to update profile photo" });
+  }
+});
+
 // POST /users/push-token — save device push token for the current user
 router.post("/push-token", authJwt, async (req, res) => {
   try {
@@ -214,6 +191,28 @@ router.post("/push-token", authJwt, async (req, res) => {
   } catch (error) {
     console.error('[POST /push-token] Error:', error.message);
     return res.status(500).json({ message: "Failed to save push token" });
+  }
+});
+
+// GET /users/:id — must be LAST to avoid catching static routes like /profile-photo
+router.get("/:id", authJwt, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requesterId = req.user?.userId;
+    const requesterIsAdmin = req.user?.isAdmin === true;
+
+    if (!requesterIsAdmin && requesterId !== id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json(user.toJSON());
+  } catch (_error) {
+    return res.status(500).json({ message: "Failed to load user profile" });
   }
 });
 

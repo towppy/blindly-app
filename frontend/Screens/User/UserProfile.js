@@ -1,5 +1,5 @@
 import React, { useContext, useState, useCallback } from "react";
-import { View, Text, ScrollView, Button, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, ScrollView, Button, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -9,6 +9,9 @@ import { logoutUser } from "../../Context/Actions/Auth.actions";
 import Input from "../../Shared/Input";
 import Toast from "react-native-toast-message";
 import AddressMapPicker from "../../Shared/AddressMapPicker";
+import * as ImagePicker from "expo-image-picker";
+import { Image } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 const UserProfile = () => {
     const context = useContext(AuthGlobal);
@@ -24,6 +27,7 @@ const UserProfile = () => {
     const [mapVisible, setMapVisible] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const navigation = useNavigation();
+    const [image, setImage] = useState(null);
 
     const requiredProfileFields = {
         phone: String(phone || "").trim(),
@@ -41,6 +45,7 @@ const UserProfile = () => {
         setUserProfile(profile);
         setName(profile?.name || "");
         setPhone(profile?.phone || "");
+        setImage(profile?.image || "");
         setDeliveryAddress1(profile?.deliveryAddress1 || "");
         setDeliveryAddress2(profile?.deliveryAddress2 || "");
         setDeliveryCity(profile?.deliveryCity || "");
@@ -96,6 +101,89 @@ const UserProfile = () => {
         });
     };
 
+    const pickImage = async () => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+        });
+
+        if (!result.canceled) {
+            const uri = result.assets[0].uri;
+            setImage(uri);
+            uploadProfileImage(uri);
+        }
+    };
+
+    const takePhoto = async () => {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (permission.status !== "granted") {
+            Toast.show({ topOffset: 60, type: "error", text1: "Camera permission denied" });
+            return;
+        }
+
+        let result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+        });
+
+        if (!result.canceled) {
+            const uri = result.assets[0].uri;
+            setImage(uri);
+            uploadProfileImage(uri);
+        }
+    };
+
+    const showImageOptions = () => {
+        Alert.alert(
+            "Change Profile Photo",
+            "Choose an option",
+            [
+                { text: "Take Photo", onPress: takePhoto },
+                { text: "Choose from Gallery", onPress: pickImage },
+                { text: "Cancel", style: "cancel" },
+            ]
+        );
+    };
+
+    const uploadProfileImage = async (uri) => {
+        try {
+            const jwt = await AsyncStorage.getItem("jwt");
+            if (!jwt) {
+                Toast.show({ topOffset: 60, type: "error", text1: "Session expired" });
+                return;
+            }
+
+            const formData = new FormData();
+            const fileName = uri.split("/").pop();
+            const fileType = fileName.split(".").pop();
+            const mimeType = fileType === "jpg" || fileType === "jpeg" ? "image/jpeg" 
+                : fileType === "png" ? "image/png" 
+                : "image/jpeg";
+
+            formData.append("image", {
+                uri: uri,
+                type: mimeType,
+                name: fileName,
+            });
+
+            const response = await axios.put(`${baseURL}users/profile-photo`, formData, {
+                headers: {
+                    Authorization: `Bearer ${jwt}`,
+                    "Content-Type": "multipart/form-data",
+                },
+            });
+
+            setImage(response.data.image);
+            Toast.show({ topOffset: 60, type: "success", text1: "Photo updated" });
+        } catch (error) {
+            console.error("Upload error:", error?.response?.data || error.message);
+            Toast.show({ topOffset: 60, type: "error", text1: "Failed to upload photo" });
+        }
+    };
+
     const saveProfile = async () => {
         try {
             setIsSaving(true);
@@ -132,6 +220,23 @@ const UserProfile = () => {
     return (
         <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.subContainer}>
+                {/* Profile Image */}
+                <TouchableOpacity onPress={showImageOptions} style={styles.profileImageContainer}>
+                    {image ? (
+                        <Image 
+                            source={{ uri: image }} 
+                            style={styles.profileImage}
+                        />
+                    ) : (
+                        <View style={styles.profileImagePlaceholder}>
+                            <Text style={styles.profileImagePlaceholderText}>Tap to add photo</Text>
+                        </View>
+                    )}
+                    <View style={styles.cameraIconOverlay}>
+                        <Ionicons name="camera" size={16} color="white" />
+                    </View>
+                </TouchableOpacity>
+                
                 <Text style={{ fontSize: 28, fontWeight: "700", color: "#1a1a1a" }}>
                     {userProfile ? userProfile.name : ""}
                 </Text>
@@ -203,6 +308,38 @@ const styles = StyleSheet.create({
         marginTop: 20,
         paddingBottom: 40,
         paddingHorizontal: 16,
+    },
+    profileImage: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 3,
+        borderColor: "#e91e63",
+    },
+    profileImagePlaceholder: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: "#ddd",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    profileImagePlaceholderText: {
+        color: "#888",
+        fontSize: 12,
+    },
+    profileImageContainer: {
+        position: "relative",
+        marginBottom: 12,
+    },
+    cameraIconOverlay: {
+        position: "absolute",
+        right: 0,
+        bottom: 12,
+        backgroundColor: "#1976d2",
+        padding: 8,
+        borderRadius: 20,
+        elevation: 4,
     },
     adminBadge: {
         backgroundColor: "#e91e63",
