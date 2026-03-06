@@ -51,4 +51,11 @@ orderSchema.set("toJSON", {
   },
 });
 
-module.exports = mongoose.model("Order", orderSchema);
+const Order = mongoose.model("Order", orderSchema);
+
+// Drop stale order_id index if it exists (one-time fix)
+Order.collection.dropIndex("order_id_1").catch(() => {
+  // Index doesn't exist, that's fine
+});
+
+module.exports = Order;

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { Text, View, TouchableHighlight, StyleSheet, Dimensions, TouchableOpacity } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -6,6 +6,8 @@ import { SwipeListView } from "react-native-swipe-list-view";
 import { removeFromCart, clearCart } from "../../Redux/Actions/cartActions";
 import { Surface, Divider, Avatar, Button } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
+import AuthGlobal from "../../Context/Store/AuthGlobal";
+
 
 var { height, width } = Dimensions.get("window");
 const FALLBACK = "https://cdn.pixabay.com/photo/2012/04/01/17/29/box-23649_960_720.png";
@@ -13,9 +15,22 @@ const FALLBACK = "https://cdn.pixabay.com/photo/2012/04/01/17/29/box-23649_960_7
 const Cart = () => {
     const navigation = useNavigation();
     const dispatch = useDispatch();
+    const context = useContext(AuthGlobal);
     const cartItems = useSelector((s) => s.cartItems);
     let total = 0;
     cartItems.forEach((c) => (total += c.price));
+
+    // Redirect to login if not authenticated
+    useEffect(() => {
+        if (!context.stateUser.isAuthenticated) {
+            navigation.navigate("User", { screen: "Login" });
+        }
+    }, [context.stateUser.isAuthenticated, navigation]);
+
+    // Show nothing while redirecting
+    if (!context.stateUser.isAuthenticated) {
+        return null;
+    }
 
     const renderItem = ({ item }) => (
         <TouchableHighlight>

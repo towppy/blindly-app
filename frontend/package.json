@@ -26,6 +26,7 @@
     "expo-image-picker": "~17.0.10",
     "expo-location": "^19.0.8",
     "expo-notifications": "~0.32.16",
+    "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
     "jwt-decode": "^4.0.0",
     "mime": "^4.1.0",
@@ -50,9 +51,6 @@
     "redux": "^5.0.1",
     "redux-thunk": "^3.1.0",
     "styled-components": "^6.3.8"
-  },
-  "overrides": {
-    "react-native-worklets": "0.5.1"
   },
   "private": true
 }

@@ -8,7 +8,7 @@ import { StyleSheet, Platform } from 'react-native';
 import React, { useContext, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { Provider as PaperProvider } from 'react-native-paper';
-import { Provider } from 'react-redux';
+import { Provider, useDispatch } from 'react-redux';
 import store from './Redux/store';
 import Toast from 'react-native-toast-message';
 import Auth from './Context/Store/Auth';
@@ -18,6 +18,7 @@ import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import baseURL from './assets/common/baseurl';
 import AuthGlobal from './Context/Store/AuthGlobal';
+import { loadCartFromDB } from './Redux/Actions/cartActions';
 
 import Constants from 'expo-constants';
 
@@ -30,6 +31,17 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
   }),
 });
+
+// Component to load cart from SQLite (must be inside Redux Provider)
+function CartLoader({ children }) {
+  const dispatch = useDispatch();
+  
+  useEffect(() => {
+    dispatch(loadCartFromDB());
+  }, [dispatch]);
+  
+  return children;
+}
 
 // Inner component that can access Auth context (it's INSIDE the <Auth> provider)
 function AppInner() {
@@ -138,12 +150,14 @@ function AppInner() {
 
   return (
     <Provider store={store}>
-      <NavigationContainer>
-        <PaperProvider>
-          <DrawerNavigator />
-        </PaperProvider>
-      </NavigationContainer>
-      <Toast />
+      <CartLoader>
+        <NavigationContainer>
+          <PaperProvider>
+            <DrawerNavigator />
+          </PaperProvider>
+        </NavigationContainer>
+        <Toast />
+      </CartLoader>
     </Provider>
   );
 }
