@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext } from "react";
 import {
     StyleSheet,
     View,
@@ -10,6 +10,8 @@ import {
 import { addToCart } from "../../Redux/Actions/cartActions";
 import { useDispatch } from "react-redux";
 import Toast from "react-native-toast-message";
+import { useNavigation } from "@react-navigation/native";
+import AuthGlobal from "../../Context/Store/AuthGlobal";
 
 var { width } = Dimensions.get("window");
 
@@ -19,6 +21,28 @@ const FALLBACK_IMAGE = "https://cdn.pixabay.com/photo/2012/04/01/17/29/box-23649
 const ProductCard = (props) => {
     const { name, price, image, countInStock } = props;
     const dispatch = useDispatch();
+    const navigation = useNavigation();
+    const context = useContext(AuthGlobal);
+
+    const handleAddToCart = () => {
+        if (!context.stateUser.isAuthenticated) {
+            Toast.show({
+                topOffset: 60,
+                type: "error",
+                text1: "Please log in",
+                text2: "You must be logged in to add items to cart",
+            });
+            navigation.navigate("User", { screen: "Login" });
+            return;
+        }
+        dispatch(addToCart({ ...props, quantity: 1 }));
+        Toast.show({
+            topOffset: 60,
+            type: "success",
+            text1: `${name} added to Cart`,
+            text2: "Go to your cart to complete order",
+        });
+    };
 
     return (
         <View style={styles.container}>
@@ -37,15 +61,7 @@ const ProductCard = (props) => {
                     <Button
                         title="Add"
                         color="green"
-                        onPress={() => {
-                            dispatch(addToCart({ ...props, quantity: 1 }));
-                            Toast.show({
-                                topOffset: 60,
-                                type: "success",
-                                text1: `${name} added to Cart`,
-                                text2: "Go to your cart to complete order",
-                            });
-                        }}
+                        onPress={handleAddToCart}
                     />
                 </View>
             ) : (
