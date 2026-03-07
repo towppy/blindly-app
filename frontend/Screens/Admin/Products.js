@@ -14,7 +14,7 @@ import { Searchbar } from "react-native-paper";
 import ListItem from "./ListItem";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getJwt } from "../../assets/common/jwtStore";
 import EasyButton from "../../Shared/StyledComponents/EasyButton";
 
 var { height, width } = Dimensions.get("window");
@@ -85,7 +85,7 @@ const Products = () => {
 
     useFocusEffect(
         useCallback(() => {
-            AsyncStorage.getItem("jwt")
+            getJwt()
                 .then((res) => setToken(res || ""))
                 .catch((error) => console.log(error));
             axios
@@ -113,7 +113,7 @@ const Products = () => {
                     medium
                     onPress={() => navigation.navigate("Orders")}
                 >
-                    <Ionicons name="bag-outline" size={18} color="white" />
+                    <Ionicons name="bag-outline" size={16} color="white" />
                     <Text style={styles.buttonText}>Orders</Text>
                 </EasyButton>
                 <EasyButton
@@ -121,7 +121,7 @@ const Products = () => {
                     medium
                     onPress={() => navigation.navigate("ProductForm")}
                 >
-                    <Ionicons name="add-outline" size={18} color="white" />
+                    <Ionicons name="add-outline" size={16} color="white" />
                     <Text style={styles.buttonText}>Add Product</Text>
                 </EasyButton>
                 <EasyButton
@@ -129,7 +129,7 @@ const Products = () => {
                     medium
                     onPress={() => navigation.navigate("Stock Alerts")}
                 >
-                    <Ionicons name="warning-outline" size={18} color="white" />
+                    <Ionicons name="warning-outline" size={16} color="white" />
                     <Text style={styles.buttonText}>Stock Alerts</Text>
                 </EasyButton>
                 <EasyButton
@@ -137,8 +137,24 @@ const Products = () => {
                     medium
                     onPress={() => navigation.navigate("Categories")}
                 >
-                    <Ionicons name="pricetag-outline" size={18} color="white" />
+                    <Ionicons name="pricetag-outline" size={16} color="white" />
                     <Text style={styles.buttonText}>Categories</Text>
+                </EasyButton>
+                <EasyButton
+                    secondary
+                    medium
+                    onPress={() => navigation.navigate("Reviews")}
+                >
+                    <Ionicons name="star-outline" size={16} color="white" />
+                    <Text style={styles.buttonText}>Reviews</Text>
+                </EasyButton>
+                <EasyButton
+                    secondary
+                    medium
+                    onPress={() => navigation.navigate("Users")}
+                >
+                    <Ionicons name="people-outline" size={16} color="white" />
+                    <Text style={styles.buttonText}>Users</Text>
                 </EasyButton>
             </View>
             <Searchbar
@@ -187,13 +203,17 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
     buttonContainer: {
-        margin: 20,
-        alignSelf: "center",
+        marginHorizontal: 8,
+        marginTop: 10,
+        marginBottom: 4,
         flexDirection: "row",
+        flexWrap: "wrap",
+        justifyContent: "center",
     },
     buttonText: {
-        marginLeft: 4,
+        marginLeft: 3,
         color: "white",
+        fontSize: 12,
     },
 });
 

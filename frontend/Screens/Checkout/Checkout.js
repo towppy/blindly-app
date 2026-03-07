@@ -7,7 +7,7 @@ import { useSelector } from "react-redux";
 import { useNavigation } from "@react-navigation/native";
 import AuthGlobal from "../../Context/Store/AuthGlobal";
 import Toast from "react-native-toast-message";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getJwt } from "../../assets/common/jwtStore";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
 
@@ -42,7 +42,7 @@ const Checkout = () => {
 
         if (context.stateUser.isAuthenticated) {
             setUser(context.stateUser.user.userId);
-            AsyncStorage.getItem("jwt")
+            getJwt()
                 .then((jwt) => {
                     if (!jwt) return;
                     return axios.get(`${baseURL}users/${context.stateUser.user.userId}`, {

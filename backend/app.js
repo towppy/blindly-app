@@ -8,6 +8,8 @@ const categoryRoutes = require("./routes/categories");
 const productRoutes = require("./routes/products");
 const orderRoutes = require("./routes/orders");
 const stockAlertRoutes = require("./routes/stockAlerts");
+const reviewRoutes = require("./routes/reviews");
+const notificationRoutes = require("./routes/notifications");
 
 const app = express();
 
@@ -22,6 +24,8 @@ app.use(`${config.apiPrefix}/categories`, categoryRoutes);
 app.use(`${config.apiPrefix}/products`, productRoutes);
 app.use(`${config.apiPrefix}/orders`, orderRoutes);
 app.use(`${config.apiPrefix}/stock-alerts`, stockAlertRoutes);
+app.use(`${config.apiPrefix}/reviews`, reviewRoutes);
+app.use(`${config.apiPrefix}/notifications`, notificationRoutes);
 
 app.get(`${config.apiPrefix}/health`, (_req, res) => {
   res.status(200).json({ ok: true, message: "Backend config scaffold is running." });

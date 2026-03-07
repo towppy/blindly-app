@@ -21,6 +21,17 @@ const DrawerContent = () => {
                 onPress={() => navigation.navigate("User", { screen: "User Profile" })}
                 icon="account"
             />
+            {isAdmin ? (
+                <Drawer.Item
+                    label="Analytics"
+                    active={active === "Analytics"}
+                    onPress={() => {
+                        setActive("Analytics");
+                        navigation.navigate("Admin", { screen: "Analytics" });
+                    }}
+                    icon="chart-bar"
+                />
+            ) : null}
             {!isAdmin ? (
                 <Drawer.Item
                     label="My Orders"

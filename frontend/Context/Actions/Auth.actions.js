@@ -2,6 +2,7 @@ import { jwtDecode } from "jwt-decode";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Toast from "react-native-toast-message";
 import baseURL from "../../assets/common/baseurl";
+import { setJwt, getJwt, deleteJwt } from "../../assets/common/jwtStore";
 
 export const SET_CURRENT_USER = "SET_CURRENT_USER";
 
@@ -14,16 +15,29 @@ export const loginUser = (user, dispatch) => {
             "Content-Type": "application/json",
         },
     })
-        .then((res) => res.json())
-        .then((data) => {
-            if (data) {
-                const token = data.token;
-                AsyncStorage.setItem("jwt", token);
-                const decoded = jwtDecode(token);
-                dispatch(setCurrentUser(decoded, user));
-            } else {
-                logoutUser(dispatch);
+        .then((res) => {
+            if (res.status === 403) {
+                return res.json().then((data) => {
+                    Toast.show({
+                        topOffset: 60,
+                        type: "error",
+                        text1: "Account Deactivated",
+                        text2: data.message || "Your account has been deactivated",
+                    });
+                    // Don't call logoutUser — no session exists yet
+                });
             }
+            return res.json().then((data) => {
+                if (data && data.token) {
+                    const token = data.token;
+                    return setJwt(token).then(() => {
+                        const decoded = jwtDecode(token);
+                        dispatch(setCurrentUser(decoded, user));
+                    });
+                } else {
+                    logoutUser(dispatch);
+                }
+            });
         })
         .catch((err) => {
             Toast.show({
@@ -49,8 +63,25 @@ export const getUserProfile = (id) => {
         .then((data) => console.log(data));
 };
 
-export const logoutUser = (dispatch) => {
-    AsyncStorage.removeItem("jwt");
+export const logoutUser = async (dispatch) => {
+    try {
+        const token = await getJwt();
+        const pushToken = await AsyncStorage.getItem("pushToken");
+        if (token && pushToken) {
+            // Best-effort: tell server to remove this push token so stale
+            // notifications are not sent after logout.
+            fetch(`${baseURL}users/push-token`, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ token: pushToken }),
+            }).catch(() => {});
+        }
+    } catch (_) {}
+    await deleteJwt();
+    await AsyncStorage.removeItem("pushToken");
     dispatch(setCurrentUser({}));
 };
 

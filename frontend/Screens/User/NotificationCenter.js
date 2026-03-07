@@ -9,26 +9,44 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Notifications from "expo-notifications";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const NotificationCenter = () => {
     const [notifications, setNotifications] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
+    const navigation = useNavigation();
 
     const loadNotifications = useCallback(async () => {
         setRefreshing(true);
         try {
-            // Get delivered notifications from the system tray
+            // System tray notifications (currently visible)
             const delivered = await Notifications.getPresentedNotificationsAsync();
-            const mapped = delivered.map((n) => ({
+            const fromTray = delivered.map((n) => ({
                 id: n.request.identifier,
                 title: n.request.content.title || "Notification",
                 body: n.request.content.body || "",
                 date: n.date ? new Date(n.date) : new Date(),
+                orderId: n.request.content.data?.orderId || null,
+                type: n.request.content.data?.type || null,
+                promoTitle: n.request.content.data?.title || null,
+                promoBody: n.request.content.data?.body || null,
+                promoDetails: n.request.content.data?.details || null,
             }));
-            // Sort newest first
-            mapped.sort((a, b) => b.date - a.date);
-            setNotifications(mapped);
+
+            // Persisted history (survives notification dismissal)
+            const stored = await AsyncStorage.getItem("notificationHistory");
+            const history = stored ? JSON.parse(stored) : [];
+            const fromHistory = history.map((n) => ({
+                ...n,
+                date: new Date(n.date),
+            }));
+
+            // Merge: deduplicate by id, tray entries take precedence
+            const ids = new Set(fromTray.map((n) => n.id));
+            const merged = [...fromTray, ...fromHistory.filter((n) => !ids.has(n.id))];
+            merged.sort((a, b) => b.date - a.date);
+            setNotifications(merged);
         } catch (err) {
             console.log("Error loading notifications:", err.message);
         }
@@ -43,13 +61,32 @@ const NotificationCenter = () => {
 
     const clearAll = async () => {
         await Notifications.dismissAllNotificationsAsync();
+        await AsyncStorage.removeItem("notificationHistory");
         setNotifications([]);
     };
 
     const renderItem = ({ item }) => (
-        <View style={styles.card}>
+        <TouchableOpacity
+            style={styles.card}
+            onPress={() => {
+                if (item.orderId) {
+                    navigation.navigate("Order Detail", { orderId: item.orderId });
+                } else if (item.type === "promo") {
+                    navigation.navigate("Promo Detail", {
+                        title: item.promoTitle || item.title,
+                        body: item.promoBody || item.body,
+                        details: item.promoDetails || "",
+                    });
+                }
+            }}
+            activeOpacity={item.orderId || item.type === "promo" ? 0.7 : 1}
+        >
             <View style={styles.iconContainer}>
-                <Ionicons name="notifications" size={24} color="#e91e63" />
+                <Ionicons
+                    name={item.type === "promo" ? "pricetag" : "notifications"}
+                    size={24}
+                    color={item.type === "promo" ? "#7c3aed" : "#e91e63"}
+                />
             </View>
             <View style={styles.textContainer}>
                 <Text style={styles.title}>{item.title}</Text>
@@ -57,8 +94,13 @@ const NotificationCenter = () => {
                 <Text style={styles.date}>
                     {item.date.toLocaleDateString()} {item.date.toLocaleTimeString()}
                 </Text>
+                {item.orderId ? (
+                    <Text style={styles.tapHint}>Tap to view order details</Text>
+                ) : item.type === "promo" ? (
+                    <Text style={[styles.tapHint, { color: "#7c3aed" }]}>Tap to view promo details</Text>
+                ) : null}
             </View>
-        </View>
+        </TouchableOpacity>
     );
 
     return (
@@ -115,6 +157,7 @@ const styles = StyleSheet.create({
     title: { fontSize: 15, fontWeight: "700", color: "#1a1a1a", marginBottom: 2 },
     body: { fontSize: 13, color: "#333", marginBottom: 4 },
     date: { fontSize: 11, color: "#666" },
+    tapHint: { fontSize: 11, color: "#7c3aed", marginTop: 3, fontStyle: "italic" },
     empty: {
         flex: 1,
         alignItems: "center",

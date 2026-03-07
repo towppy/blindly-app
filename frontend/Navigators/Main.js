@@ -18,6 +18,7 @@ const Tab = createBottomTabNavigator();
 const Main = () => {
     const context = useContext(AuthGlobal);
     const isAdmin = context?.stateUser?.user?.isAdmin === true;
+    const isAuthenticated = context?.stateUser?.isAuthenticated === true;
     return (
         <Tab.Navigator
             initialRouteName="Home"
@@ -37,18 +38,20 @@ const Main = () => {
                     ),
                 }}
             />
-            <Tab.Screen
-                name="Cart Screen"
-                component={CartNavigator}
-                options={{
-                    tabBarIcon: ({ color }) => (
-                        <>
-                            <Ionicons name="cart" style={{ position: "relative" }} color={color} size={30} />
-                            <CartIcon />
-                        </>
-                    ),
-                }}
-            />
+            {!isAdmin ? (
+                <Tab.Screen
+                    name="Cart Screen"
+                    component={CartNavigator}
+                    options={{
+                        tabBarIcon: ({ color }) => (
+                            <>
+                                <Ionicons name="cart" style={{ position: "relative" }} color={color} size={30} />
+                                <CartIcon />
+                            </>
+                        ),
+                    }}
+                />
+            ) : null}
             {isAdmin ? (
                 <Tab.Screen
                     name="Admin"
@@ -74,6 +77,16 @@ const Main = () => {
             <Tab.Screen
                 name="User"
                 component={UserNavigator}
+                listeners={({ navigation }) => ({
+                    tabPress: (e) => {
+                        e.preventDefault();
+                        if (isAuthenticated) {
+                            navigation.navigate("User", { screen: "User Profile" });
+                        } else {
+                            navigation.navigate("User", { screen: "User Landing" });
+                        }
+                    },
+                })}
                 options={{
                     tabBarIcon: ({ color }) => (
                         <Ionicons name="person" style={{ position: "relative" }} color={color} size={30} />

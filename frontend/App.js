@@ -16,30 +16,46 @@ import DrawerNavigator from './Navigators/DrawerNavigator';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getJwt } from './assets/common/jwtStore';
 import baseURL from './assets/common/baseurl';
 import AuthGlobal from './Context/Store/AuthGlobal';
 import { loadCartFromDB } from './Redux/Actions/cartActions';
+import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
+import { setActiveDB, CART_SCHEMA } from './Redux/cartDatabase';
+
+async function migrateDatabase(db) {
+  await db.execAsync(CART_SCHEMA);
+  console.log('[CartDB] Schema ready via SQLiteProvider');
+}
 
 import Constants from 'expo-constants';
 
-// MUST be at module level - tells Expo how to handle notifications in the foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+const IS_EXPO_GO =
+  Constants.appOwnership === 'expo' ||
+  Constants.executionEnvironment === 'storeClient';
 
-// Component to load cart from SQLite (must be inside Redux Provider)
+// Only set the notification handler in real builds — Expo Go removed remote push in SDK 53
+if (!IS_EXPO_GO) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
+
+// Component to load cart from SQLite (must be inside Redux Provider + SQLiteProvider)
 function CartLoader({ children }) {
+  const db = useSQLiteContext();
   const dispatch = useDispatch();
-  
+
   useEffect(() => {
+    setActiveDB(db);
     dispatch(loadCartFromDB());
-  }, [dispatch]);
-  
+  }, [db, dispatch]);
+
   return children;
 }
 
@@ -48,14 +64,39 @@ function AppInner() {
   const context = useContext(AuthGlobal);
 
   useEffect(() => {
-    if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('default', {
+    if (IS_EXPO_GO || Platform.OS !== 'android') return;
+    Notifications.setNotificationChannelAsync('default', {
         name: 'default',
         importance: Notifications.AndroidImportance.MAX,
         sound: 'default',
         vibrationPattern: [0, 250, 250, 250],
       }).catch(() => {});
-    }
+  }, []);
+
+  useEffect(() => {
+    if (IS_EXPO_GO) return;
+    // Persist every incoming notification so NotificationCenter can show them
+    // even after they are dismissed from the system tray.
+    const sub = Notifications.addNotificationReceivedListener(async (notification) => {
+      try {
+        const item = {
+          id: notification.request.identifier,
+          title: notification.request.content.title || "Notification",
+          body: notification.request.content.body || "",
+          date: new Date().toISOString(),
+          orderId: notification.request.content.data?.orderId || null,
+          type: notification.request.content.data?.type || null,
+          promoTitle: notification.request.content.data?.title || null,
+          promoBody: notification.request.content.data?.body || null,
+          promoDetails: notification.request.content.data?.details || null,
+        };
+        const existing = await AsyncStorage.getItem("notificationHistory");
+        const arr = existing ? JSON.parse(existing) : [];
+        const updated = [item, ...arr.filter((n) => n.id !== item.id)].slice(0, 100);
+        await AsyncStorage.setItem("notificationHistory", JSON.stringify(updated));
+      } catch (_) {}
+    });
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {
@@ -112,7 +153,7 @@ function AppInner() {
         // Always clear old cached token to force re-registration
         await AsyncStorage.removeItem('pushToken');
 
-        const jwt = await AsyncStorage.getItem('jwt');
+        const jwt = await getJwt();
         if (!jwt) {
           console.log('[Push] No JWT found, skipping backend registration');
           return;
@@ -144,20 +185,22 @@ function AppInner() {
 
     if (context?.stateUser?.isAuthenticated) {
       console.log('[Push] User is authenticated, registering...');
-      registerPushToken();
+      if (!IS_EXPO_GO) registerPushToken();
     }
   }, [context?.stateUser?.isAuthenticated]);
 
   return (
     <Provider store={store}>
-      <CartLoader>
+      <SQLiteProvider databaseName="blindly_cart.db" onInit={migrateDatabase}>
+        <CartLoader>
         <NavigationContainer>
           <PaperProvider>
             <DrawerNavigator />
           </PaperProvider>
         </NavigationContainer>
         <Toast />
-      </CartLoader>
+        </CartLoader>
+      </SQLiteProvider>
     </Provider>
   );
 }

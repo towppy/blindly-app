@@ -2,6 +2,8 @@ import React from "react";
 import { createStackNavigator } from "@react-navigation/stack";
 import ProductContainer from "../Screens/Product/ProductContainer";
 import SingleProduct from "../Screens/Product/SingleProduct";
+import PromoNotification from "../Screens/Admin/PromoNotification";
+import PromoDetail from "../Screens/User/PromoDetail";
 
 const Stack = createStackNavigator();
 
@@ -17,6 +19,16 @@ function MyStack() {
                 name="Product Detail"
                 component={SingleProduct}
                 options={{ headerShown: true }}
+            />
+            <Stack.Screen
+                name="Promo Notification"
+                component={PromoNotification}
+                options={{ title: "Send Promo" }}
+            />
+            <Stack.Screen
+                name="Promo Detail"
+                component={PromoDetail}
+                options={{ title: "Promo Details" }}
             />
         </Stack.Navigator>
     );

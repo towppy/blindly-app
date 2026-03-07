@@ -15,6 +15,7 @@ const productSchema = new mongoose.Schema(
     numReviews: { type: Number, default: 0 },
     isFeatured: { type: Boolean, default: false },
     dateCreated: { type: Date, default: Date.now },
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

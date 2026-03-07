@@ -26,6 +26,10 @@ function normalizeStatus(value) {
 // POST /orders — authenticated user places an order
 router.post("/", authJwt, async (req, res) => {
   try {
+    if (req.user?.isAdmin) {
+      return res.status(403).json({ message: "Admins cannot place orders" });
+    }
+
     const { orderItems } = req.body;
 
     if (!orderItems || orderItems.length === 0) {
@@ -92,10 +96,8 @@ router.post("/", authJwt, async (req, res) => {
       dateOrdered: new Date(),
     });
 
-    const admins = await User.find({ isAdmin: true, pushToken: { $ne: "" } }, "pushToken pushTokenType").lean();
-    const adminTokens = admins
-      .filter((a) => a.pushToken)
-      .map((a) => ({ token: a.pushToken, type: a.pushTokenType || "fcm" }));
+    const admins = await User.find({ isAdmin: true, "pushTokens.0": { $exists: true } }, "pushTokens").lean();
+    const adminTokens = admins.flatMap((a) => (a.pushTokens || []).map((t) => ({ token: t.token, type: t.type })));
     await sendToTokens(adminTokens, {
       title: "New order placed",
       body: `Order ${order.id} has been placed.`,
@@ -174,7 +176,7 @@ router.put("/:id", authJwt, async (req, res) => {
 
     const adminTransitions = {
       [STATUS.PENDING]: [STATUS.SHIPPED, STATUS.CANCELLED],
-      [STATUS.SHIPPED]: [STATUS.CANCELLED],
+      [STATUS.SHIPPED]: [STATUS.DELIVERED, STATUS.CANCELLED],
       [STATUS.DELIVERED]: [],
       [STATUS.CANCELLED]: [],
     };
@@ -202,13 +204,28 @@ router.put("/:id", authJwt, async (req, res) => {
       { new: true }
     ).populate("user", "id name email");
 
+    // Notify order owner (user) of the status change
     const recipient = await User.findById(existing.user).lean();
-    if (recipient?.pushToken) {
-      await sendToTokens([{ token: recipient.pushToken, type: recipient.pushTokenType || "fcm" }], {
+    if (recipient?.pushTokens?.length > 0) {
+      const recipientTokens = (recipient.pushTokens || []).map((t) => ({ token: t.token, type: t.type }));
+      await sendToTokens(recipientTokens, {
         title: "Order status updated",
         body: `Order ${updated.id} is now ${desiredStatus}.`,
         data: { orderId: updated.id, status: desiredStatus },
       });
+    }
+
+    // If a user made the update, also notify all admins
+    if (!req.user.isAdmin) {
+      const admins = await User.find({ isAdmin: true, "pushTokens.0": { $exists: true } }, "pushTokens").lean();
+      const adminTokens = admins.flatMap((a) => (a.pushTokens || []).map((t) => ({ token: t.token, type: t.type })));
+      if (adminTokens.length > 0) {
+        await sendToTokens(adminTokens, {
+          title: "Order updated by customer",
+          body: `Order ${updated.id} was changed to ${desiredStatus} by the customer.`,
+          data: { orderId: updated.id, status: desiredStatus },
+        });
+      }
     }
 
     return res.status(200).json(updated);

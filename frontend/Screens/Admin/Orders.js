@@ -3,7 +3,7 @@ import { View, FlatList } from "react-native";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
 import { useFocusEffect } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getJwt } from "../../assets/common/jwtStore";
 import OrderCard from "../../Shared/OrderCard";
 
 const Orders = () => {
@@ -12,7 +12,7 @@ const Orders = () => {
     useFocusEffect(
         useCallback(() => {
             let isMounted = true;
-            AsyncStorage.getItem("jwt")
+            getJwt()
                 .then((res) => {
                     const token = res || "";
                     return axios.get(`${baseURL}orders`, {

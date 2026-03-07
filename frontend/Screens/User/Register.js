@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     Button,
     ActivityIndicator,
+    Alert,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useNavigation } from "@react-navigation/native";
@@ -49,11 +50,36 @@ const Register = () => {
         }
     };
 
+    const showImageOptions = () => {
+        Alert.alert(
+            "Profile Photo",
+            "Choose an option",
+            [
+                { text: "Take Photo", onPress: takePhoto },
+                { text: "Choose from Gallery", onPress: pickImage },
+                { text: "Cancel", style: "cancel" },
+            ]
+        );
+    };
+
     const register = () => {
         if (email === "" || name === "" || phone === "" || password === "") {
             setError("Please fill in the form correctly");
             return;
         }
+
+        // Email must contain @ and .com
+        if (!email.includes("@") || !email.includes(".com")) {
+            setError("Please enter a valid email address (must contain @ and .com)");
+            return;
+        }
+
+        // Phone must be exactly 11 digits
+        if (!/^\d{11}$/.test(phone)) {
+            setError("Phone number must be exactly 11 digits");
+            return;
+        }
+
         setError("");
         setIsSubmitting(true);
 
@@ -80,24 +106,35 @@ const Register = () => {
         axios
             .post(`${baseURL}users/register`, formData, config)
             .then((res) => {
-                if (res.status === 200) {
+                if (res.status === 200 || res.status === 201) {
                     Toast.show({
                         topOffset: 60,
                         type: "success",
-                        text1: "Registration Succeeded",
+                        text1: "Account created successfully",
                         text2: "Please login into your account",
                     });
                     setTimeout(() => navigation.navigate("Login"), 500);
                 }
             })
             .catch((err) => {
-                Toast.show({
-                    position: "bottom",
-                    bottomOffset: 20,
-                    type: "error",
-                    text1: "Something went wrong",
-                    text2: "Please try again",
-                });
+                const status = err?.response?.status;
+                const message = err?.response?.data?.message || "";
+                if (status === 409 || message.toLowerCase().includes("email already")) {
+                    Toast.show({
+                        topOffset: 60,
+                        type: "error",
+                        text1: "Email already taken",
+                        text2: "Please use a different email address",
+                    });
+                } else {
+                    Toast.show({
+                        position: "bottom",
+                        bottomOffset: 20,
+                        type: "error",
+                        text1: "Something went wrong",
+                        text2: "Please try again",
+                    });
+                }
                 console.log(err);
             })
             .finally(() => setIsSubmitting(false));
@@ -144,7 +181,7 @@ const Register = () => {
                         style={styles.image}
                         source={mainImage ? { uri: mainImage } : null}
                     />
-                    <TouchableOpacity onPress={takePhoto} style={styles.imagePicker}>
+                    <TouchableOpacity onPress={showImageOptions} style={styles.imagePicker}>
                         <Ionicons name="camera" style={{ color: "white" }} />
                     </TouchableOpacity>
                 </View>

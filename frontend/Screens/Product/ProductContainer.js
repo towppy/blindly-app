@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from "react";
-import { View, ScrollView, Text, Dimensions } from "react-native";
+import React, { useState, useCallback, useContext, useEffect } from "react";
+import { View, ScrollView, Text, Dimensions, TouchableOpacity, StyleSheet } from "react-native";
 import { Surface, Searchbar, Button, Card } from "react-native-paper";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
 import ProductList from "./ProductList";
@@ -8,7 +8,11 @@ import Banner from "../../Shared/Banner";
 import CategoryFilter from "./CategoryFilter";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
+import AuthGlobal from "../../Context/Store/AuthGlobal";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchProducts } from "../../Redux/Actions/productActions";
 
 // style
 import ProductContainerStyles from "../../Shared/Product/ProductContainer.styles";
@@ -16,12 +20,15 @@ import ProductContainerStyles from "../../Shared/Product/ProductContainer.styles
 const { height, width } = Dimensions.get("window");
 
 const ProductContainer = () => {
-    const [products, setProducts] = useState([]);
+    const context = useContext(AuthGlobal);
+    const isAdmin = context?.stateUser?.user?.isAdmin === true;
+    const navigation = useNavigation();
+    const dispatch = useDispatch();
+    const { items: products } = useSelector((state) => state.products);
     const [productsFiltered, setProductsFiltered] = useState([]);
     const [focus, setFocus] = useState(false);
     const [categories, setCategories] = useState([]);
     const [active, setActive] = useState(-1);
-    const [initialState, setInitialState] = useState([]);
     const [productsCtg, setProductsCtg] = useState([]);
     const [keyword, setKeyword] = useState("");
 
@@ -38,9 +45,20 @@ const ProductContainer = () => {
     const openList = () => setFocus(true);
     const onBlur = () => setFocus(false);
 
+    useEffect(() => {
+        if (products.length > 0) {
+            setProductsFiltered(products);
+            setProductsCtg(products);
+            const prices = products.map((p) => p.price);
+            const max = Math.max(...prices);
+            setMaxPrice(max);
+            setPriceRange([0, max]);
+        }
+    }, [products]);
+
     const changeCtg = (ctg) => {
         if (ctg === "all") {
-            setProductsCtg(initialState);
+            setProductsCtg(products);
             setActive(true);
         } else {
             setProductsCtg(
@@ -70,20 +88,7 @@ const ProductContainer = () => {
             setFocus(false);
             setActive(-1);
 
-            axios
-                .get(`${baseURL}products`)
-                .then((res) => {
-                    setProducts(res.data);
-                    setProductsFiltered(res.data);
-                    setProductsCtg(res.data);
-                    setInitialState(res.data);
-
-                    const prices = res.data.map(p => p.price);
-                    const max = Math.max(...prices);
-                    setMaxPrice(max);
-                    setPriceRange([0, max]);
-                })
-                .catch(() => console.log("Api call error"));
+            dispatch(fetchProducts());
 
             axios
                 .get(`${baseURL}categories`)
@@ -91,12 +96,10 @@ const ProductContainer = () => {
                 .catch(() => console.log("Api categories call error"));
 
             return () => {
-                setProducts([]);
                 setProductsFiltered([]);
                 setCategories([]);
-                setInitialState([]);
             };
-        }, [])
+        }, [dispatch])
     );
 
     return (
@@ -114,6 +117,15 @@ const ProductContainer = () => {
 
             {!focus && (
                 <View style={{ width: '90%', marginVertical: 10 }}>
+                    {isAdmin ? (
+                        <TouchableOpacity
+                            style={promoButtonStyles.promoBtn}
+                            onPress={() => navigation.navigate("Promo Notification")}
+                        >
+                            <Ionicons name="megaphone-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+                            <Text style={promoButtonStyles.promoBtnText}>Add Promo / Discounts</Text>
+                        </TouchableOpacity>
+                    ) : null}
                     <Button 
                         mode="outlined" 
                         onPress={() => setShowPriceFilter(!showPriceFilter)}
@@ -224,3 +236,16 @@ const ProductContainer = () => {
 };
 
 export default ProductContainer;
+
+const promoButtonStyles = StyleSheet.create({
+    promoBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#7c3aed",
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 10,
+    },
+    promoBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+});

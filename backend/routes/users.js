@@ -69,6 +69,10 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    if (user.isActive === false) {
+      return res.status(403).json({ message: "Your account has been deactivated. Please contact support." });
+    }
+
     const payload = {
       userId: user.id,
       email: user.email,
@@ -173,7 +177,7 @@ router.put("/profile-photo", authJwt, upload.single("image"), async (req, res) =
   }
 });
 
-// POST /users/push-token — save device push token for the current user
+// POST /users/push-token — add device push token to the current user's pushTokens array
 router.post("/push-token", authJwt, async (req, res) => {
   try {
     const { token, type } = req.body;
@@ -181,16 +185,121 @@ router.post("/push-token", authJwt, async (req, res) => {
       return res.status(400).json({ message: "Push token is required" });
     }
 
-    const tokenType = type || (token.startsWith("ExponentPushToken") ? "expo" : "fcm");
-    console.log(`[POST /push-token] Saving ${tokenType} push token for user ${req.user.userId}: ${token.substring(0, 30)}...`);
+    const tokenType = type || (String(token).startsWith("ExponentPushToken") ? "expo" : "fcm");
+    console.log(`[POST /push-token] Saving ${tokenType} push token for user ${req.user.userId}: ${String(token).substring(0, 30)}...`);
+
+    // Remove any existing entry with the same token value, then add the new one
     await User.findByIdAndUpdate(req.user.userId, {
-      pushToken: String(token),
-      pushTokenType: tokenType,
+      $pull: { pushTokens: { token: String(token) } },
+    });
+    await User.findByIdAndUpdate(req.user.userId, {
+      $push: { pushTokens: { token: String(token), type: tokenType } },
     });
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error('[POST /push-token] Error:', error.message);
     return res.status(500).json({ message: "Failed to save push token" });
+  }
+});
+
+// DELETE /users/push-token — remove a specific push token on logout
+router.delete("/push-token", authJwt, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (token) {
+      await User.findByIdAndUpdate(req.user.userId, {
+        $pull: { pushTokens: { token: String(token) } },
+      });
+    } else {
+      // No specific token provided — clear all tokens for this user
+      await User.findByIdAndUpdate(req.user.userId, { $set: { pushTokens: [] } });
+    }
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('[DELETE /push-token] Error:', error.message);
+    return res.status(500).json({ message: "Failed to remove push token" });
+  }
+});
+
+// GET /users — admin only, list all users
+router.get("/", authJwt, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    const users = await User.find().sort({ createdAt: -1 }).lean();
+    // Use toJSON transform by calling it on each document is not available on lean()
+    // Strip sensitive fields manually
+    const safe = users.map((u) => {
+      const { passwordHash, pushTokens, _id, __v, ...rest } = u;
+      return { ...rest, id: String(_id) };
+    });
+    return res.status(200).json(safe);
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to load users" });
+  }
+});
+
+// PATCH /users/:id/deactivate — admin only
+router.patch("/:id/deactivate", authJwt, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
+    const user = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    return res.status(200).json({ success: true, isActive: false });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to deactivate user" });
+  }
+});
+
+// PATCH /users/:id/activate — admin only
+router.patch("/:id/activate", authJwt, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
+    const user = await User.findByIdAndUpdate(req.params.id, { isActive: true }, { new: true });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    return res.status(200).json({ success: true, isActive: true });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to activate user" });
+  }
+});
+
+// DELETE /users/:id — admin only, soft delete (sets isActive: false)
+router.delete("/:id", authJwt, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
+    const user = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    return res.status(200).json({ success: true });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to delete user" });
+  }
+});
+
+// PUT /users/change-password — authenticated user changes their own password
+router.put("/change-password", authJwt, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: "currentPassword and newPassword are required" });
+    }
+
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const matches = await bcrypt.compare(String(currentPassword), user.passwordHash);
+    if (!matches) {
+      return res.status(400).json({ message: "Current password is incorrect" });
+    }
+
+    user.passwordHash = await bcrypt.hash(String(newPassword), 10);
+    await user.save();
+
+    return res.status(200).json({ success: true });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to change password" });
   }
 });
 

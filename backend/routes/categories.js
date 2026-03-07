@@ -7,7 +7,7 @@ const router = express.Router();
 // GET /categories — public, used by home screen and admin
 router.get("/", async (_req, res) => {
   try {
-    const categories = await Category.find();
+    const categories = await Category.find({ isActive: { $ne: false } });
     return res.status(200).json(categories);
   } catch (_error) {
     return res.status(500).json({ message: "Failed to load categories" });
@@ -72,13 +72,13 @@ router.put("/:id", authJwt, async (req, res) => {
   }
 });
 
-// DELETE /categories/:id — admin only
+// DELETE /categories/:id — admin only, soft delete
 router.delete("/:id", authJwt, async (req, res) => {
   try {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
-    const deleted = await Category.findByIdAndDelete(req.params.id);
+    const deleted = await Category.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
     if (!deleted) {
       return res.status(404).json({ message: "Category not found" });
     }

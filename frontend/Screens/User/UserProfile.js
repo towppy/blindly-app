@@ -1,7 +1,7 @@
 import React, { useContext, useState, useCallback } from "react";
 import { View, Text, ScrollView, Button, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getJwt } from "../../assets/common/jwtStore";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
 import AuthGlobal from "../../Context/Store/AuthGlobal";
@@ -28,6 +28,13 @@ const UserProfile = () => {
     const [isSaving, setIsSaving] = useState(false);
     const navigation = useNavigation();
     const [image, setImage] = useState(null);
+
+    // Change password state
+    const [showChangePassword, setShowChangePassword] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
 
     const requiredProfileFields = {
         phone: String(phone || "").trim(),
@@ -70,10 +77,10 @@ const UserProfile = () => {
                 context.stateUser.isAuthenticated === false ||
                 context.stateUser.isAuthenticated === null
             ) {
-                navigation.navigate("User", { screen: "Login" });
+                navigation.navigate("User Landing");
                 return;
             }
-            AsyncStorage.getItem("jwt")
+            getJwt()
                 .then((res) => {
                     axios
                         .get(`${baseURL}users/${context.stateUser.user.userId}`, {
@@ -150,7 +157,7 @@ const UserProfile = () => {
 
     const uploadProfileImage = async (uri) => {
         try {
-            const jwt = await AsyncStorage.getItem("jwt");
+            const jwt = await getJwt();
             if (!jwt) {
                 Toast.show({ topOffset: 60, type: "error", text1: "Session expired" });
                 return;
@@ -187,7 +194,7 @@ const UserProfile = () => {
     const saveProfile = async () => {
         try {
             setIsSaving(true);
-            const jwt = await AsyncStorage.getItem("jwt");
+            const jwt = await getJwt();
             if (!jwt) {
                 Toast.show({ topOffset: 60, type: "error", text1: "Session expired", text2: "Please login again" });
                 return;
@@ -214,6 +221,36 @@ const UserProfile = () => {
             Toast.show({ topOffset: 60, type: "error", text1: "Failed to save profile" });
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const changePassword = async () => {
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            Toast.show({ topOffset: 60, type: "error", text1: "Please fill in all password fields" });
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            Toast.show({ topOffset: 60, type: "error", text1: "New passwords do not match" });
+            return;
+        }
+        try {
+            setIsChangingPassword(true);
+            const jwt = await getJwt();
+            await axios.put(
+                `${baseURL}users/change-password`,
+                { currentPassword, newPassword },
+                { headers: { Authorization: `Bearer ${jwt}` } }
+            );
+            Toast.show({ topOffset: 60, type: "success", text1: "Password changed successfully" });
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+            setShowChangePassword(false);
+        } catch (err) {
+            const msg = err?.response?.data?.message || "Failed to change password";
+            Toast.show({ topOffset: 60, type: "error", text1: msg });
+        } finally {
+            setIsChangingPassword(false);
         }
     };
 
@@ -252,7 +289,7 @@ const UserProfile = () => {
                 </View>
                 {!isCheckoutReady ? (
                     <Text style={styles.missingFieldsText}>
-                        Missing: {missingRequiredFields.join(", ")}
+                        Please fill out your address
                     </Text>
                 ) : null}
                 <View style={{ marginTop: 20, width: "100%", alignItems: "center" }}>
@@ -276,16 +313,68 @@ const UserProfile = () => {
                         <Button title={isSaving ? "Saving..." : "Save Profile"} disabled={isSaving} onPress={saveProfile} />
                     </View>
                 </View>
-                <View style={{ marginTop: 30, width: "88%" }}>
-                    <Button
-                        title="Sign Out"
-                        color="#d32f2f"
-                        onPress={() => {
-                            AsyncStorage.removeItem("jwt");
-                            logoutUser(context.dispatch);
-                        }}
-                    />
-                </View>
+
+                {/* Change Password Section */}
+                <TouchableOpacity
+                    style={styles.changePasswordToggle}
+                    onPress={() => {
+                        setShowChangePassword((v) => !v);
+                        setCurrentPassword("");
+                        setNewPassword("");
+                        setConfirmPassword("");
+                    }}
+                >
+                    <Ionicons name="lock-closed-outline" size={16} color="#1976d2" style={{ marginRight: 6 }} />
+                    <Text style={styles.changePasswordToggleText}>
+                        {showChangePassword ? "Cancel Change Password" : "Change Password"}
+                    </Text>
+                </TouchableOpacity>
+
+                {showChangePassword && (
+                    <View style={{ width: "100%", alignItems: "center" }}>
+                        <Input
+                            label="Current Password"
+                            placeholder="Enter current password"
+                            value={currentPassword}
+                            secureTextEntry={true}
+                            showToggle={true}
+                            onChangeText={setCurrentPassword}
+                        />
+                        <Input
+                            label="New Password"
+                            placeholder="Enter new password"
+                            value={newPassword}
+                            secureTextEntry={true}
+                            showToggle={true}
+                            onChangeText={setNewPassword}
+                        />
+                        <Input
+                            label="Confirm New Password"
+                            placeholder="Re-enter new password"
+                            value={confirmPassword}
+                            secureTextEntry={true}
+                            showToggle={true}
+                            onChangeText={setConfirmPassword}
+                        />
+                        <View style={{ width: "88%", marginTop: 4, marginBottom: 8 }}>
+                            <Button
+                                title={isChangingPassword ? "Updating..." : "Update Password"}
+                                disabled={isChangingPassword}
+                                onPress={changePassword}
+                            />
+                        </View>
+                    </View>
+                )}
+                <TouchableOpacity
+                    style={styles.logoutBtn}
+                    onPress={() => {
+                        logoutUser(context.dispatch);
+                    }}
+                    activeOpacity={0.8}
+                >
+                    <Ionicons name="log-out-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.logoutBtnText}>Sign Out</Text>
+                </TouchableOpacity>
             </ScrollView>
             <AddressMapPicker
                 visible={mapVisible}
@@ -390,6 +479,22 @@ const styles = StyleSheet.create({
         marginHorizontal: 16,
         textAlign: "center",
     },
+    logoutBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#dc2626",
+        borderRadius: 12,
+        paddingVertical: 14,
+        width: "88%",
+        marginTop: 30,
+        marginBottom: 16,
+    },
+    logoutBtnText: {
+        color: "#fff",
+        fontSize: 16,
+        fontWeight: "700",
+    },
     sectionHeader: {
         fontSize: 16,
         fontWeight: "700",
@@ -403,6 +508,22 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: "#555",
         marginBottom: 4,
+    },
+    changePasswordToggle: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginTop: 20,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        backgroundColor: "#e3f0ff",
+        borderRadius: 10,
+        width: "88%",
+        justifyContent: "center",
+    },
+    changePasswordToggleText: {
+        color: "#1976d2",
+        fontWeight: "700",
+        fontSize: 14,
     },
 });
 

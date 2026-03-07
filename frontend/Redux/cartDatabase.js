@@ -2,47 +2,47 @@
  * SQLite cart persistence helper
  * Saves cart items to local SQLite database
  * Loads cart on app start, clears after checkout
+ *
+ * The DB instance is provided by SQLiteProvider in App.js via setActiveDB().
+ * This avoids the Android NullPointerException caused by openDatabaseAsync
+ * returning before the native layer is ready.
  */
-import * as SQLite from 'expo-sqlite';
 
-const DATABASE_NAME = 'blindly_cart.db';
+// Set by CartLoader via useSQLiteContext() — guaranteed ready before use
+let _db = null;
 
-let db = null;
-
-// Initialize database and create cart table
-export const initCartDB = async () => {
-    try {
-        db = await SQLite.openDatabaseAsync(DATABASE_NAME);
-        
-        await db.execAsync(`
-            CREATE TABLE IF NOT EXISTS cart_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                product_id TEXT UNIQUE,
-                name TEXT,
-                price REAL,
-                image TEXT,
-                countInStock INTEGER,
-                quantity INTEGER DEFAULT 1,
-                data TEXT
-            );
-        `);
-        
-        console.log('[CartDB] Database initialized');
-        return true;
-    } catch (error) {
-        console.error('[CartDB] Init error:', error);
-        return false;
-    }
+export const setActiveDB = (db) => {
+    _db = db;
+    console.log('[CartDB] Database instance set');
 };
+
+const requireDB = () => {
+    if (!_db) throw new Error('[CartDB] Database not ready. Ensure SQLiteProvider is mounted.');
+    return _db;
+};
+
+// SQL run once by SQLiteProvider onInit (see App.js)
+export const CART_SCHEMA = `
+    CREATE TABLE IF NOT EXISTS cart_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT UNIQUE,
+        name TEXT,
+        price REAL,
+        image TEXT,
+        countInStock INTEGER,
+        quantity INTEGER DEFAULT 1,
+        data TEXT
+    );
+`;
+
+// No-op kept for backward compat — real init happens in SQLiteProvider
+export const initCartDB = async () => true;
 
 // Get all cart items from SQLite
 export const getCartItems = async () => {
     try {
-        if (!db) await initCartDB();
-        
+        const db = requireDB();
         const rows = await db.getAllAsync('SELECT * FROM cart_items');
-        
-        // Parse the full product data from JSON
         return rows.map(row => {
             try {
                 return JSON.parse(row.data);
@@ -66,11 +66,9 @@ export const getCartItems = async () => {
 // Add item to cart in SQLite
 export const addCartItem = async (item) => {
     try {
-        if (!db) await initCartDB();
-        
+        const db = requireDB();
         const productId = item.id || item._id;
         const data = JSON.stringify(item);
-        
         await db.runAsync(
             `INSERT OR REPLACE INTO cart_items (product_id, name, price, image, countInStock, quantity, data) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -81,10 +79,9 @@ export const addCartItem = async (item) => {
                 item.image || '',
                 item.countInStock || 0,
                 item.quantity || 1,
-                data
+                data,
             ]
         );
-        
         console.log('[CartDB] Item added:', item.name);
         return true;
     } catch (error) {
@@ -96,11 +93,9 @@ export const addCartItem = async (item) => {
 // Remove item from cart in SQLite
 export const removeCartItem = async (item) => {
     try {
-        if (!db) await initCartDB();
-        
+        const db = requireDB();
         const productId = item.id || item._id;
         await db.runAsync('DELETE FROM cart_items WHERE product_id = ?', [productId]);
-        
         console.log('[CartDB] Item removed:', item.name || productId);
         return true;
     } catch (error) {
@@ -112,10 +107,8 @@ export const removeCartItem = async (item) => {
 // Clear all cart items from SQLite (after checkout)
 export const clearCartDB = async () => {
     try {
-        if (!db) await initCartDB();
-        
+        const db = requireDB();
         await db.runAsync('DELETE FROM cart_items');
-        
         console.log('[CartDB] Cart cleared');
         return true;
     } catch (error) {
@@ -127,16 +120,11 @@ export const clearCartDB = async () => {
 // Sync entire cart state to SQLite (replaces all items)
 export const syncCartToDB = async (cartItems) => {
     try {
-        if (!db) await initCartDB();
-        
-        // Clear existing items
+        const db = requireDB();
         await db.runAsync('DELETE FROM cart_items');
-        
-        // Insert all current items
         for (const item of cartItems) {
             await addCartItem(item);
         }
-        
         console.log('[CartDB] Cart synced, items:', cartItems.length);
         return true;
     } catch (error) {

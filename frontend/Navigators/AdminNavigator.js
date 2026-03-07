@@ -7,6 +7,10 @@ import Products from "../Screens/Admin/Products";
 import ProductForm from "../Screens/Admin/ProductForm";
 import Categories from "../Screens/Admin/Categories";
 import StockAlerts from "../Screens/Admin/StockAlerts";
+import Analytics from "../Screens/Admin/Analytics";
+import Reviews from "../Screens/Admin/Reviews";
+import PromoNotification from "../Screens/Admin/PromoNotification";
+import AdminUsers from "../Screens/Admin/AdminUsers";
 import AuthGlobal from "../Context/Store/AuthGlobal";
 
 const Stack = createStackNavigator();
@@ -40,6 +44,10 @@ const AdminNavigator = () => {
             <Stack.Screen name="Orders" component={Orders} />
             <Stack.Screen name="Stock Alerts" component={StockAlerts} />
             <Stack.Screen name="ProductForm" component={ProductForm} />
+            <Stack.Screen name="Analytics" component={Analytics} options={{ title: "Analytics" }} />
+            <Stack.Screen name="Reviews" component={Reviews} options={{ title: "Reviews" }} />
+            <Stack.Screen name="Promo Notification" component={PromoNotification} options={{ title: "Send Promo" }} />
+            <Stack.Screen name="Users" component={AdminUsers} options={{ title: "Users" }} />
         </Stack.Navigator>
     );
 };

@@ -107,7 +107,7 @@ function buildImageUrl(req, filename) {
 // GET /products — public, used by home screen
 router.get("/", async (_req, res) => {
   try {
-    const products = await Product.find().populate("category", "id name color");
+    const products = await Product.find({ isActive: { $ne: false } }).populate("category", "id name color");
     return res.status(200).json(products);
   } catch (_error) {
     return res.status(500).json({ message: "Failed to load products" });
@@ -193,13 +193,13 @@ router.put("/:id", authJwt, upload.single("image"), async (req, res) => {
   }
 });
 
-// DELETE /products/:id — admin only
+// DELETE /products/:id — admin only, soft delete
 router.delete("/:id", authJwt, async (req, res) => {
   try {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
-    const deleted = await Product.findByIdAndDelete(req.params.id);
+    const deleted = await Product.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
     if (!deleted) return res.status(404).json({ message: "Product not found" });
     return res.status(200).json({ success: true });
   } catch (_error) {

@@ -18,8 +18,13 @@ const userSchema = new mongoose.Schema(
       latitude: { type: Number, default: null },
       longitude: { type: Number, default: null },
     },
-    pushToken: { type: String, default: "" },
-    pushTokenType: { type: String, enum: ["fcm", "expo", "unknown", ""], default: "" },
+    pushTokens: [
+      {
+        token: { type: String, required: true },
+        type: { type: String, enum: ["fcm", "expo", "unknown"], default: "unknown" },
+      },
+    ],
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
@@ -34,8 +39,7 @@ userSchema.set("toJSON", {
   transform: (_doc, ret) => {
     delete ret._id;
     delete ret.passwordHash;
-    delete ret.pushToken;
-    delete ret.pushTokenType;
+    delete ret.pushTokens;
     return ret;
   },
 });

@@ -7,13 +7,14 @@ import {
     TouchableOpacity,
     Platform,
     ActivityIndicator,
+    Alert,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import FormContainer from "../../Shared/FormContainer";
 import Input from "../../Shared/Input";
 import EasyButton from "../../Shared/StyledComponents/EasyButton";
 import Toast from "react-native-toast-message";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getJwt } from "../../assets/common/jwtStore";
 import baseURL from "../../assets/common/baseurl";
 import Error from "../../Shared/Error";
 import axios from "axios";
@@ -61,7 +62,7 @@ const ProductForm = (props) => {
         } else {
             setItem(null);
         }
-        AsyncStorage.getItem("jwt").then((res) => setToken(res || "")).catch(() => {});
+        getJwt().then((res) => setToken(res || "")).catch(() => {});
         axios.get(`${baseURL}categories`).then((res) => setCategories(res.data)).catch(() => alert("Error loading categories"));
         if (Platform.OS !== "web") {
             ImagePicker.requestCameraPermissionsAsync().then(({ status }) => {
@@ -84,6 +85,37 @@ const ProductForm = (props) => {
             setImage(uri);
             setImagePicked(true);
         }
+    };
+
+    const takePhoto = async () => {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (permission.status !== "granted") {
+            Alert.alert("Permission denied", "Camera access is required to take a photo.");
+            return;
+        }
+        const result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 1,
+        });
+        if (!result.canceled) {
+            const uri = result.assets[0].uri;
+            setMainImage(uri);
+            setImage(uri);
+            setImagePicked(true);
+        }
+    };
+
+    const showImageOptions = () => {
+        Alert.alert(
+            "Product Image",
+            "Choose an option",
+            [
+                { text: "Take Photo", onPress: takePhoto },
+                { text: "Choose from Gallery", onPress: pickImage },
+                { text: "Cancel", style: "cancel" },
+            ]
+        );
     };
 
     const addProduct = () => {
@@ -144,7 +176,7 @@ const ProductForm = (props) => {
         <FormContainer title={item ? "Edit Product" : "Add Product"}>
             <View style={styles.imageContainer}>
                 <Image style={styles.image} source={mainImage ? { uri: mainImage } : null} />
-                <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
+                <TouchableOpacity onPress={showImageOptions} style={styles.imagePicker}>
                     <Ionicons name="camera" style={{ color: "white" }} />
                 </TouchableOpacity>
             </View>

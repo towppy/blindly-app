@@ -24,6 +24,8 @@ const ProductCard = (props) => {
     const navigation = useNavigation();
     const context = useContext(AuthGlobal);
 
+    const isAdmin = context?.stateUser?.user?.isAdmin === true;
+
     const handleAddToCart = () => {
         if (!context.stateUser.isAuthenticated) {
             Toast.show({
@@ -33,6 +35,15 @@ const ProductCard = (props) => {
                 text2: "You must be logged in to add items to cart",
             });
             navigation.navigate("User", { screen: "Login" });
+            return;
+        }
+        if (isAdmin) {
+            Toast.show({
+                topOffset: 60,
+                type: "error",
+                text1: "Admins cannot order",
+                text2: "Only customers can add items to cart",
+            });
             return;
         }
         dispatch(addToCart({ ...props, quantity: 1 }));
@@ -56,7 +67,7 @@ const ProductCard = (props) => {
                 {name.length > 15 ? name.substring(0, 12) + "..." : name}
             </Text>
             <Text style={styles.price}>${price}</Text>
-            {countInStock > 0 ? (
+            {countInStock > 0 && !isAdmin ? (
                 <View style={{ marginBottom: 60 }}>
                     <Button
                         title="Add"
@@ -64,9 +75,9 @@ const ProductCard = (props) => {
                         onPress={handleAddToCart}
                     />
                 </View>
-            ) : (
+            ) : countInStock <= 0 ? (
                 <Text style={{ marginTop: 20 }}>Currently Unavailable</Text>
-            )}
+            ) : null}
         </View>
     );
 };

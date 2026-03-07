@@ -3,7 +3,7 @@ import { View, StyleSheet, Dimensions, ScrollView, Button, Text } from "react-na
 import { Surface, Avatar, Divider } from "react-native-paper";
 import { useNavigation } from "@react-navigation/native";
 import { useDispatch } from "react-redux";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getJwt } from "../../assets/common/jwtStore";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
 import Toast from "react-native-toast-message";
@@ -20,7 +20,7 @@ const Confirm = (props) => {
     const navigation = useNavigation();
 
     const confirmOrder = () => {
-        AsyncStorage.getItem("jwt")
+        getJwt()
             .then((res) => {
                 setToken(res || "");
                 const config = { headers: { Authorization: "Bearer " + res } };

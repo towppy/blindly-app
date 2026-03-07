@@ -32,6 +32,15 @@ const Cart = () => {
         return null;
     }
 
+    const isAdmin = context?.stateUser?.user?.isAdmin === true;
+    if (isAdmin) {
+        return (
+            <Surface style={styles.emptyContainer}>
+                <Text>Admins cannot place orders.</Text>
+            </Surface>
+        );
+    }
+
     const renderItem = ({ item }) => (
         <TouchableHighlight>
             <Surface style={{ padding: 8, margin: 4, backgroundColor: "white" }}>

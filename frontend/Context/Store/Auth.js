@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useReducer, useState } from "react";
 import { jwtDecode } from "jwt-decode";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getJwt } from "../../assets/common/jwtStore";
 
 import authReducer from "../Reducers/Auth.reducer";
 import { setCurrentUser } from "../Actions/Auth.actions";
@@ -19,12 +19,16 @@ const Auth = props => {
 
     useEffect(() => {
         setShowChild(true);
-        if (AsyncStorage.jwt) {
-            const decoded = AsyncStorage.jwt ? AsyncStorage.jwt : "";
-            if (setShowChild) {
-                dispatch(setCurrentUser(jwtDecode(decoded)));
+        // Restore session from SecureStore on app mount
+        getJwt().then((token) => {
+            if (token) {
+                try {
+                    dispatch(setCurrentUser(jwtDecode(token)));
+                } catch (_) {
+                    // Token malformed — ignore, user stays logged out
+                }
             }
-        }
+        });
         return () => setShowChild(false);
     }, []);
 

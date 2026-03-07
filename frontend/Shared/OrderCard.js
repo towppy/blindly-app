@@ -4,7 +4,7 @@ import TrafficLight from "./StyledComponents/TrafficLight";
 import EasyButton from "./StyledComponents/EasyButton";
 import Toast from "react-native-toast-message";
 import { Picker } from "@react-native-picker/picker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getJwt } from "../assets/common/jwtStore";
 import axios from "axios";
 import baseURL from "../assets/common/baseurl";
 import { useNavigation } from "@react-navigation/native";
@@ -18,7 +18,7 @@ const STATUS = {
 
 const adminTransitions = {
     [STATUS.PENDING]: [STATUS.SHIPPED, STATUS.CANCELLED],
-    [STATUS.SHIPPED]: [STATUS.CANCELLED],
+    [STATUS.SHIPPED]: [STATUS.DELIVERED, STATUS.CANCELLED],
     [STATUS.DELIVERED]: [],
     [STATUS.CANCELLED]: [],
 };
@@ -42,7 +42,12 @@ const normalizeStatus = (value) => {
 const OrderCard = ({ item, update, isAdmin = false }) => {
     const [orderStatus, setOrderStatus] = useState("");
     const [statusText, setStatusText] = useState("");
-    const [statusChange, setStatusChange] = useState(normalizeStatus(item.status));
+    // Initialize to first valid next-status so the picker always has a meaningful selection
+    const [statusChange, setStatusChange] = useState(() => {
+        const cur = normalizeStatus(item.status);
+        const trans = (isAdmin ? adminTransitions : userTransitions)[cur] || [];
+        return trans[0] || cur;
+    });
     const [cardColor, setCardColor] = useState("");
     const [isUpdating, setIsUpdating] = useState(false);
     const navigation = useNavigation();
@@ -50,7 +55,7 @@ const OrderCard = ({ item, update, isAdmin = false }) => {
     const updateOrder = () => {
         if (isUpdating) return;
         setIsUpdating(true);
-        AsyncStorage.getItem("jwt")
+        getJwt()
             .then((res) => {
                 const token = res || "";
                 const config = {
