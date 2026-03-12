@@ -8,3 +8,4 @@ uploads/
 *firebase-adminsdk*.json
 firebase-service-account*.json
 firebaseServiceAccountKey.json
+config/firebaseServiceAccountKey.json
