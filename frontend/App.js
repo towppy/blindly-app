@@ -46,15 +46,18 @@ if (!IS_EXPO_GO) {
   });
 }
 
-// Component to load cart from SQLite (must be inside Redux Provider + SQLiteProvider)
+// Component to load cart from SQLite for the current user (must be inside Redux Provider + SQLiteProvider)
+import { useContext as useReactContext } from 'react';
 function CartLoader({ children }) {
   const db = useSQLiteContext();
   const dispatch = useDispatch();
+  const authContext = useReactContext(AuthGlobal);
+  const userEmail = authContext?.stateUser?.user?.email;
 
   useEffect(() => {
     setActiveDB(db);
-    dispatch(loadCartFromDB());
-  }, [db, dispatch]);
+    dispatch(loadCartFromDB(userEmail));
+  }, [db, dispatch, userEmail]);
 
   return children;
 }

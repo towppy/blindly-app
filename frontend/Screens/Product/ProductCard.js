@@ -46,7 +46,7 @@ const ProductCard = (props) => {
             });
             return;
         }
-        dispatch(addToCart({ ...props, quantity: 1 }));
+        dispatch(addToCart({ ...props, quantity: 1 }, context.stateUser.user?.email));
         Toast.show({
             topOffset: 60,
             type: "success",

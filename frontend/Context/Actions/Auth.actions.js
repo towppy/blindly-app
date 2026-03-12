@@ -3,10 +3,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Toast from "react-native-toast-message";
 import baseURL from "../../assets/common/baseurl";
 import { setJwt, getJwt, deleteJwt } from "../../assets/common/jwtStore";
+import { clearCart, loadCartFromDB } from "../../Redux/Actions/cartActions";
 
 export const SET_CURRENT_USER = "SET_CURRENT_USER";
 
-export const loginUser = (user, dispatch) => {
+export const loginUser = (user, dispatch, reduxDispatch) => {
+    // Clear cart for previous user (if any)
+    if (reduxDispatch) reduxDispatch(clearCart(user?.email));
     return fetch(`${baseURL}users/login`, {
         method: "POST",
         body: JSON.stringify(user),
@@ -33,9 +36,13 @@ export const loginUser = (user, dispatch) => {
                     return setJwt(token).then(() => {
                         const decoded = jwtDecode(token);
                         dispatch(setCurrentUser(decoded, user));
+                        // Load cart for this user
+                        if (reduxDispatch && decoded && decoded.email) {
+                            reduxDispatch(loadCartFromDB(decoded.email));
+                        }
                     });
                 } else {
-                    logoutUser(dispatch);
+                    logoutUser(dispatch, reduxDispatch);
                 }
             });
         })
@@ -63,7 +70,7 @@ export const getUserProfile = (id) => {
         .then((data) => console.log(data));
 };
 
-export const logoutUser = async (dispatch) => {
+export const logoutUser = async (dispatch, reduxDispatch, userId) => {
     try {
         const token = await getJwt();
         const pushToken = await AsyncStorage.getItem("pushToken");
@@ -82,6 +89,9 @@ export const logoutUser = async (dispatch) => {
     } catch (_) {}
     await deleteJwt();
     await AsyncStorage.removeItem("pushToken");
+    if (reduxDispatch && userId) {
+        await reduxDispatch(clearCart(userId));
+    }
     dispatch(setCurrentUser({}));
 };
 

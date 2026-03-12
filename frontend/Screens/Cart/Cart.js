@@ -53,7 +53,7 @@ const Cart = () => {
     );
 
     const renderHiddenItem = (rowData) => (
-        <TouchableOpacity onPress={() => dispatch(removeFromCart(rowData.item))}>
+        <TouchableOpacity onPress={() => dispatch(removeFromCart(rowData.item, context.stateUser.user?.email))}>
             <Surface style={styles.hiddenButton}>
                 <Ionicons name="trash" color="white" size={30} />
                 <Text style={{ color: "white" }}>Delete</Text>
@@ -82,7 +82,7 @@ const Cart = () => {
             )}
             <View style={styles.bottomContainer}>
                 <Text style={styles.price}>$ {total.toFixed(2)}</Text>
-                <Button mode="contained" onPress={() => dispatch(clearCart())} style={{ backgroundColor: "red" }}>Clear</Button>
+                <Button mode="contained" onPress={() => dispatch(clearCart(context.stateUser.user?.email))} style={{ backgroundColor: "red" }}>Clear</Button>
                 <Button mode="contained" onPress={() => navigation.navigate("Checkout")} style={{ backgroundColor: "green" }}>Check Out</Button>
             </View>
         </>

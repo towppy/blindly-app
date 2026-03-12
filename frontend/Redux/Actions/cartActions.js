@@ -12,41 +12,51 @@ import {
     initCartDB,
 } from '../cartDatabase';
 
-// Thunk: Load cart from SQLite on app start
-export const loadCartFromDB = () => {
+// Thunk: Load cart from SQLite for a user on app start or login
+export const loadCartFromDB = (userId) => {
     return async (dispatch) => {
+        if (!userId) {
+            dispatch({ type: LOAD_CART, payload: [] });
+            return;
+        }
         try {
             await initCartDB();
-            const items = await getCartItems();
+            const items = await getCartItems(userId);
             dispatch({ type: LOAD_CART, payload: items });
-            console.log('[Cart] Loaded from SQLite:', items.length, 'items');
+            console.log('[Cart] Loaded from SQLite for user', userId, ':', items.length, 'items');
         } catch (error) {
             console.error('[Cart] Load error:', error);
         }
     };
 };
 
-// Thunk: Add to cart and persist to SQLite
-export const addToCart = (payload) => {
+// Thunk: Add to cart and persist to SQLite for a user
+export const addToCart = (payload, userId) => {
     return async (dispatch) => {
+        if (!userId) return;
         dispatch({ type: ADD_TO_CART, payload });
-        await addCartItem(payload);
+        await addCartItem(payload, userId);
     };
 };
 
-// Thunk: Remove from cart and persist to SQLite
-export const removeFromCart = (payload) => {
+// Thunk: Remove from cart and persist to SQLite for a user
+export const removeFromCart = (payload, userId) => {
     return async (dispatch) => {
+        if (!userId) return;
         dispatch({ type: REMOVE_FROM_CART, payload });
-        await removeCartItem(payload);
+        await removeCartItem(payload, userId);
     };
 };
 
-// Thunk: Clear cart and clear SQLite (after checkout)
-export const clearCart = () => {
+// Thunk: Clear cart and clear SQLite for a user (after checkout or logout)
+export const clearCart = (userId) => {
     return async (dispatch) => {
+        if (!userId) {
+            dispatch({ type: CLEAR_CART });
+            return;
+        }
         dispatch({ type: CLEAR_CART });
-        await clearCartDB();
-        console.log('[Cart] Cleared from SQLite');
+        await clearCartDB(userId);
+        console.log('[Cart] Cleared from SQLite for user', userId);
     };
 };

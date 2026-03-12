@@ -23,26 +23,30 @@ const requireDB = () => {
 
 // SQL run once by SQLiteProvider onInit (see App.js)
 export const CART_SCHEMA = `
+    DROP TABLE IF EXISTS cart_items;
     CREATE TABLE IF NOT EXISTS cart_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        product_id TEXT UNIQUE,
+        user_id TEXT,
+        product_id TEXT,
         name TEXT,
         price REAL,
         image TEXT,
         countInStock INTEGER,
         quantity INTEGER DEFAULT 1,
-        data TEXT
+        data TEXT,
+        UNIQUE(user_id, product_id)
     );
 `;
 
 // No-op kept for backward compat — real init happens in SQLiteProvider
 export const initCartDB = async () => true;
 
-// Get all cart items from SQLite
-export const getCartItems = async () => {
+// Get all cart items for a user from SQLite
+export const getCartItems = async (userId) => {
+    if (!userId) return [];
     try {
         const db = requireDB();
-        const rows = await db.getAllAsync('SELECT * FROM cart_items');
+        const rows = await db.getAllAsync('SELECT * FROM cart_items WHERE user_id = ?', [userId]);
         return rows.map(row => {
             try {
                 return JSON.parse(row.data);
@@ -63,16 +67,18 @@ export const getCartItems = async () => {
     }
 };
 
-// Add item to cart in SQLite
-export const addCartItem = async (item) => {
+// Add item to cart in SQLite for a user
+export const addCartItem = async (item, userId) => {
+    if (!userId) return false;
     try {
         const db = requireDB();
         const productId = item.id || item._id;
         const data = JSON.stringify(item);
         await db.runAsync(
-            `INSERT OR REPLACE INTO cart_items (product_id, name, price, image, countInStock, quantity, data) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT OR REPLACE INTO cart_items (user_id, product_id, name, price, image, countInStock, quantity, data) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [
+                userId,
                 productId,
                 item.name || '',
                 item.price || 0,
@@ -82,7 +88,7 @@ export const addCartItem = async (item) => {
                 data,
             ]
         );
-        console.log('[CartDB] Item added:', item.name);
+        console.log('[CartDB] Item added for user', userId, ':', item.name);
         return true;
     } catch (error) {
         console.error('[CartDB] Add item error:', error);
@@ -90,13 +96,14 @@ export const addCartItem = async (item) => {
     }
 };
 
-// Remove item from cart in SQLite
-export const removeCartItem = async (item) => {
+// Remove item from cart in SQLite for a user
+export const removeCartItem = async (item, userId) => {
+    if (!userId) return false;
     try {
         const db = requireDB();
         const productId = item.id || item._id;
-        await db.runAsync('DELETE FROM cart_items WHERE product_id = ?', [productId]);
-        console.log('[CartDB] Item removed:', item.name || productId);
+        await db.runAsync('DELETE FROM cart_items WHERE user_id = ? AND product_id = ?', [userId, productId]);
+        console.log('[CartDB] Item removed for user', userId, ':', item.name || productId);
         return true;
     } catch (error) {
         console.error('[CartDB] Remove item error:', error);
@@ -104,12 +111,13 @@ export const removeCartItem = async (item) => {
     }
 };
 
-// Clear all cart items from SQLite (after checkout)
-export const clearCartDB = async () => {
+// Clear all cart items for a user from SQLite (after checkout or logout)
+export const clearCartDB = async (userId) => {
+    if (!userId) return false;
     try {
         const db = requireDB();
-        await db.runAsync('DELETE FROM cart_items');
-        console.log('[CartDB] Cart cleared');
+        await db.runAsync('DELETE FROM cart_items WHERE user_id = ?', [userId]);
+        console.log('[CartDB] Cart cleared for user', userId);
         return true;
     } catch (error) {
         console.error('[CartDB] Clear cart error:', error);
@@ -118,14 +126,15 @@ export const clearCartDB = async () => {
 };
 
 // Sync entire cart state to SQLite (replaces all items)
-export const syncCartToDB = async (cartItems) => {
+export const syncCartToDB = async (cartItems, userId) => {
+    if (!userId) return false;
     try {
         const db = requireDB();
-        await db.runAsync('DELETE FROM cart_items');
+        await db.runAsync('DELETE FROM cart_items WHERE user_id = ?', [userId]);
         for (const item of cartItems) {
-            await addCartItem(item);
+            await addCartItem(item, userId);
         }
-        console.log('[CartDB] Cart synced, items:', cartItems.length);
+        console.log('[CartDB] Cart synced for user', userId, 'items:', cartItems.length);
         return true;
     } catch (error) {
         console.error('[CartDB] Sync error:', error);
