@@ -7,3 +7,4 @@ pnpm-debug.log*
 uploads/
 *firebase-adminsdk*.json
 firebase-service-account*.json
+firebaseServiceAccountKey.json
