@@ -7,6 +7,8 @@ const authJwt = require("../middleware/authJwt");
 const User = require("../models/User");
 const upload = require("../helpers/upload");
 
+
+const firebaseAdmin = require("../config/firebase");
 const router = express.Router();
 
 function toBoolean(value) {
@@ -17,6 +19,13 @@ function toBoolean(value) {
 
 router.post("/register", upload.single("image"), async (req, res) => {
   try {
+    // Log Firebase project ID to confirm correct project
+    try {
+      const projectId = firebaseAdmin.app().options.credential.projectId || firebaseAdmin.app().options.projectId;
+      console.log(`[Firebase] Using project: ${projectId}`);
+    } catch (projErr) {
+      console.log('[Firebase] Could not determine project ID:', projErr.message);
+    }
     const { name, email, password, phone } = req.body;
     const isAdmin = toBoolean(req.body.isAdmin);
 
@@ -30,9 +39,30 @@ router.post("/register", upload.single("image"), async (req, res) => {
       return res.status(409).json({ message: "Email already exists" });
     }
 
+
+    // Create user in Firebase Authentication
+    let firebaseUser;
+    let firebasePayload = {
+      email: normalizedEmail,
+      password: String(password),
+      displayName: String(name).trim(),
+    };
+    // Try to add phoneNumber if it looks like E.164 format
+    const phoneTrimmed = String(phone).trim();
+    if (/^\+\d{10,15}$/.test(phoneTrimmed)) {
+      firebasePayload.phoneNumber = phoneTrimmed;
+    }
+    try {
+      firebaseUser = await firebaseAdmin.auth().createUser(firebasePayload);
+    } catch (fbErr) {
+      console.error("[Firebase Register Error]", fbErr.message, fbErr);
+      return res.status(500).json({ message: "Failed to create user in Firebase", error: fbErr.message });
+    }
+
     const passwordHash = await bcrypt.hash(String(password), 10);
     const image = req.file ? req.file.path : "";
 
+    // Save user in MongoDB, including Firebase UID
     const user = await User.create({
       name: String(name).trim(),
       email: normalizedEmail,
@@ -40,6 +70,7 @@ router.post("/register", upload.single("image"), async (req, res) => {
       phone: String(phone).trim(),
       image,
       isAdmin,
+      firebaseUid: firebaseUser.uid,
     });
 
     return res.status(201).json({
@@ -59,11 +90,27 @@ router.post("/login", async (req, res) => {
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
+    // Try to get user from MongoDB
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    // Try to verify credentials with Firebase Authentication
+    let firebaseUser;
+    try {
+      // Firebase Admin does not support password verification directly.
+      // In production, you should verify the password on the client using Firebase SDK,
+      // then send the ID token to the backend for verification.
+      // For demonstration, fallback to local password check for now.
+      // Optionally, you can use a custom endpoint to verify with Firebase REST API.
+      firebaseUser = await firebaseAdmin.auth().getUserByEmail(normalizedEmail);
+    } catch (fbErr) {
+      // If user not found in Firebase, treat as invalid
+      return res.status(401).json({ message: "Invalid credentials (Firebase)" });
+    }
+
+    // Local password check (since Firebase Admin cannot check password)
     const passwordMatches = await bcrypt.compare(String(password), user.passwordHash);
     if (!passwordMatches) {
       return res.status(401).json({ message: "Invalid credentials" });

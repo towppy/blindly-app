@@ -25,6 +25,7 @@ const userSchema = new mongoose.Schema(
       },
     ],
     isActive: { type: Boolean, default: true },
+    firebaseUid: { type: String, default: null },
   },
   { timestamps: true }
 );
