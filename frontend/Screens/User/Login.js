@@ -1,14 +1,16 @@
 import React, { useState, useContext, useEffect } from "react";
-import { View, Text, StyleSheet, Button, ActivityIndicator } from "react-native";
+import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import FormContainer from "../../Shared/FormContainer";
 import AuthGlobal from "../../Context/Store/AuthGlobal";
 import { loginUser } from "../../Context/Actions/Auth.actions";
 import Input from "../../Shared/Input";
-import * as Google from 'expo-auth-session/providers/google';
+import * as Google from "expo-auth-session/providers/google";
 import Toast from "react-native-toast-message";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
+import { Ionicons } from "@expo/vector-icons";
+import styles, { COLORS } from "../../Shared/User/Login.styles";
 
 const Login = () => {
     const context = useContext(AuthGlobal);
@@ -17,23 +19,13 @@ const Login = () => {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [request, response, promptAsync] = Google.useAuthRequest({
-        expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        androidClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    });
 
-    const handleSubmit = () => {
-        const user = { email, password };
-        if (email === "" || password === "") {
-            setError("Please fill in your credentials");
-        } else {
-            setError("");
-            setIsSubmitting(true);
-            loginUser(user, context.dispatch).finally(() => setIsSubmitting(false));
-        }
-    };
+    const [request, response, promptAsync] = Google.useAuthRequest({
+        expoClientId:   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        iosClientId:    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        androidClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        webClientId:    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    });
 
     useEffect(() => {
         if (context.stateUser.isAuthenticated === true) {
@@ -42,43 +34,39 @@ const Login = () => {
     }, [context.stateUser.isAuthenticated]);
 
     useEffect(() => {
-        if (response?.type === 'success') {
+        if (response?.type === "success") {
             const { id_token } = response.params;
             if (id_token) {
                 setIsSubmitting(true);
-                axios.post(`${baseURL}users/google-login`, { idToken: id_token })
-                    .then((res) => {
-                        Toast.show({
-                            topOffset: 60,
-                            type: 'success',
-                            text1: 'Google login successful',
-                            text2: 'You are now signed in',
-                        });
-                        // You may want to dispatch loginUser here with the returned token
-                        // or navigate to the profile screen
+                axios
+                    .post(`${baseURL}users/google-login`, { idToken: id_token })
+                    .then(() => {
+                        Toast.show({ topOffset: 60, type: "success", text1: "Google login successful", text2: "You are now signed in" });
                     })
                     .catch((err) => {
-                        Toast.show({
-                            position: 'bottom',
-                            bottomOffset: 20,
-                            type: 'error',
-                            text1: 'Google sign-in failed',
-                            text2: 'Please try again',
-                        });
                         console.log(err);
+                        Toast.show({ topOffset: 60, type: "error", text1: "Google sign-in failed", text2: "Please try again" });
                     })
                     .finally(() => setIsSubmitting(false));
             }
         }
     }, [response]);
 
+    const handleSubmit = () => {
+        if (!email || !password) {
+            setError("Please fill in your credentials");
+            return;
+        }
+        setError("");
+        setIsSubmitting(true);
+        loginUser({ email, password }, context.dispatch).finally(() => setIsSubmitting(false));
+    };
+
     return (
         <FormContainer title="Login">
             <Input
                 label="Email"
                 placeholder="Enter your email"
-                name="email"
-                id="email"
                 value={email}
                 onChangeText={(text) => setEmail(text.toLowerCase())}
                 autoCapitalize="none"
@@ -87,66 +75,64 @@ const Login = () => {
             <Input
                 label="Password"
                 placeholder="Enter your password"
-                name="password"
-                id="password"
-                secureTextEntry={true}
-                showToggle={true}
+                secureTextEntry
+                showToggle
                 value={password}
-                onChangeText={(text) => setPassword(text)}
+                onChangeText={setPassword}
             />
+
             <View style={styles.buttonGroup}>
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
-                {isSubmitting ? (
+
+                {isSubmitting && (
                     <View style={styles.loadingRow}>
-                        <ActivityIndicator size="small" />
-                        <Text style={styles.loadingText}>Signing in...</Text>
+                        <ActivityIndicator size="small" color={COLORS.primary} />
+                        <Text style={styles.loadingText}>Signing in…</Text>
                     </View>
-                ) : null}
-                <Button title="Login" onPress={() => handleSubmit()} disabled={isSubmitting} />
+                )}
+
+                <TouchableOpacity
+                    style={[styles.loginBtn, isSubmitting && styles.loginBtnDisabled]}
+                    onPress={handleSubmit}
+                    disabled={isSubmitting}
+                    activeOpacity={0.85}
+                >
+                    <Ionicons name="log-in-outline" size={18} color={COLORS.white} />
+                    <Text style={styles.loginBtnText}>Login</Text>
+                </TouchableOpacity>
             </View>
+
+            <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
+            </View>
+
             <View style={styles.buttonGroup}>
-                <Button
-                    title="Sign In with Google"
+                <TouchableOpacity
+                    style={[styles.googleBtn, isSubmitting && styles.googleBtnDisabled]}
                     onPress={() => promptAsync()}
                     disabled={isSubmitting}
-                />
+                    activeOpacity={0.85}
+                >
+                    <Ionicons name="logo-google" size={18} color="#DB4437" />
+                    <Text style={styles.googleBtnText}>Sign in with Google</Text>
+                </TouchableOpacity>
             </View>
-            <View style={styles.buttonGroup}>
-                <Text style={styles.middleText}>Don't have an account yet?</Text>
-                <Button
-                    title="Register"
+
+            <View style={styles.registerRow}>
+                <Text style={styles.registerPrompt}>Don't have an account yet?</Text>
+                <TouchableOpacity
+                    style={styles.registerBtn}
                     onPress={() => navigation.navigate("Register")}
-                />
+                    activeOpacity={0.8}
+                >
+                    <Ionicons name="person-add-outline" size={15} color={COLORS.primary} />
+                    <Text style={styles.registerBtnText}>Register</Text>
+                </TouchableOpacity>
             </View>
         </FormContainer>
     );
 };
-
-const styles = StyleSheet.create({
-    buttonGroup: {
-        width: "80%",
-        alignItems: "center",
-    },
-    loadingRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 8,
-    },
-    loadingText: {
-        marginLeft: 8,
-        color: "#333",
-    },
-    errorText: {
-        color: "#d32f2f",
-        marginBottom: 8,
-        fontWeight: "600",
-    },
-    middleText: {
-        marginBottom: 20,
-        alignSelf: "center",
-        color: "#333",
-        fontSize: 14,
-    },
-});
 
 export default Login;

@@ -196,11 +196,13 @@ function AppInner() {
     }
   }, [context?.stateUser?.isAuthenticated]);
 
-  // Notification tap handler: navigate to MyOrders if screen is set
+  // Notification tap handler: navigate to Order Detail if orderId is present, else MyOrders
   useEffect(() => {
     const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      const screen = response.notification.request.content.data?.screen;
-      if (screen === "MyOrders" && navigationRef.isReady()) {
+      const data = response.notification.request.content.data;
+      if (data?.orderId && navigationRef.isReady()) {
+        navigationRef.navigate('Order Detail', { orderId: data.orderId });
+      } else if (data?.screen === "MyOrders" && navigationRef.isReady()) {
         navigationRef.navigate('MyOrders');
       }
     });

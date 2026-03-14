@@ -4,6 +4,7 @@ import { createDrawerNavigator } from "@react-navigation/drawer";
 import Main from "./Main";
 import DrawerContent from "../Shared/DrawerContent";
 
+
 const NativeDrawer = createDrawerNavigator();
 const { width, height } = Dimensions.get("window");
 

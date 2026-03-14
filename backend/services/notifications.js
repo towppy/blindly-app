@@ -76,6 +76,24 @@ async function sendExpo(tokens, title, body, data) {
     });
     const result = await response.json();
     console.log(`[notifications] Expo push sent to ${tokens.length} token(s):`, JSON.stringify(result.data?.map(d => d.status) || result));
+
+    // Remove stale tokens (status === 'error' and details.error === 'DeviceNotRegistered')
+    if (Array.isArray(result.data)) {
+      const staleTokens = [];
+      result.data.forEach((entry, idx) => {
+        if (entry.status === 'error' && entry.details?.error === 'DeviceNotRegistered') {
+          staleTokens.push(tokens[idx]);
+        }
+      });
+      if (staleTokens.length > 0) {
+        const User = require("../models/User");
+        await User.updateMany(
+          { "pushTokens.token": { $in: staleTokens } },
+          { $pull: { pushTokens: { token: { $in: staleTokens } } } }
+        );
+        console.log(`[notifications] Removed ${staleTokens.length} stale Expo push token(s)`);
+      }
+    }
   } catch (error) {
     console.warn("[notifications] Expo push error:", error.message);
   }
