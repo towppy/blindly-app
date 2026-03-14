@@ -1,6 +1,6 @@
-import React, { useState, useContext } from "react";
-import { View, StyleSheet, Dimensions, ScrollView, Button, Text } from "react-native";
-import { Surface, Avatar, Divider } from "react-native-paper";
+import React, { useState } from "react";
+import { View, Text, ScrollView, TouchableOpacity, Image } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useDispatch } from "react-redux";
 import { getJwt } from "../../assets/common/jwtStore";
@@ -8,12 +8,25 @@ import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
 import Toast from "react-native-toast-message";
 import { clearCart } from "../../Redux/Actions/cartActions";
+import styles, { COLORS } from "../../Shared/Checkout/Confirm.styles";
 
-var { width, height } = Dimensions.get("window");
 const FALLBACK_IMAGE = "https://cdn.pixabay.com/photo/2012/04/01/17/29/box-23649_960_720.png";
 
+const AddressRow = ({ icon, label, value }) => (
+    value ? (
+        <View style={styles.addressRow}>
+            <View style={styles.addressIconWrap}>
+                <Ionicons name={icon} size={16} color={COLORS.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+                <Text style={styles.addressFieldLabel}>{label}</Text>
+                <Text style={styles.addressFieldValue}>{value}</Text>
+            </View>
+        </View>
+    ) : null
+);
+
 const Confirm = (props) => {
-    const [token, setToken] = useState("");
     const finalOrder = props.route.params;
     const order = finalOrder?.order;
     const dispatch = useDispatch();
@@ -22,97 +35,85 @@ const Confirm = (props) => {
     const confirmOrder = () => {
         getJwt()
             .then((res) => {
-                setToken(res || "");
                 const config = { headers: { Authorization: "Bearer " + res } };
-                axios
-                    .post(`${baseURL}orders`, order, config)
-                    .then((res) => {
-                        Toast.show({
-                            topOffset: 60,
-                            type: "success",
-                            text1: "Order completed",
-                            text2: "",
-                        });
-                        setTimeout(() => {
-                            dispatch(clearCart());
-                            navigation.navigate("Cart Screen", { screen: "Cart" });
-                        }, 500);
-                    })
-                    .catch(() => {
-                        Toast.show({
-                            topOffset: 60,
-                            type: "error",
-                            text1: "Something went wrong",
-                            text2: "Please try again",
-                        });
-                    });
+                return axios.post(`${baseURL}orders`, order, config);
             })
-            .catch(() => {});
+            .then(() => {
+                Toast.show({ topOffset: 60, type: "success", text1: "Order placed!" });
+                setTimeout(() => {
+                    dispatch(clearCart());
+                    navigation.navigate("Cart Screen", { screen: "Cart" });
+                }, 500);
+            })
+            .catch(() => {
+                Toast.show({ topOffset: 60, type: "error", text1: "Something went wrong", text2: "Please try again" });
+            });
     };
 
     if (!order) {
         return (
-            <View style={styles.container}>
-                <Text>No order data.</Text>
+            <View style={styles.emptyContainer}>
+                <View style={styles.emptyIcon}>
+                    <Ionicons name="receipt-outline" size={34} color={COLORS.primary} />
+                </View>
+                <Text style={styles.emptyText}>No order data found.</Text>
             </View>
         );
     }
 
     return (
-        <Surface>
-            <ScrollView contentContainerStyle={styles.container}>
-                <View style={styles.titleContainer}>
-                    <Text style={{ fontSize: 20, fontWeight: "bold" }}>Confirm Order</Text>
-                    <View style={{ borderWidth: 1, borderColor: "orange", marginTop: 10 }}>
-                        <Text style={styles.title}>Shipping to:</Text>
-                        <View style={{ padding: 8 }}>
-                            <Text>Address: {order.shippingAddress1}</Text>
-                            <Text>Address2: {order.shippingAddress2}</Text>
-                            <Text>City: {order.city}</Text>
-                            <Text>Zip Code: {order.zip}</Text>
-                            <Text>Country: {order.country}</Text>
-                        </View>
-                        <Text style={styles.title}>Items</Text>
-                        {order.orderItems?.map((item, idx) => (
-                            <Surface key={item.id || item._id || idx} style={{ padding: 8, margin: 4 }}>
-                                <Avatar.Image
-                                    size={48}
-                                    source={{ uri: item.image || FALLBACK_IMAGE }}
-                                />
-                                <Text>{item.name}</Text>
-                                <Divider />
-                                <Text style={{ alignSelf: "flex-start" }}>$ {item.price}</Text>
-                            </Surface>
-                        ))}
-                    </View>
-                    <View style={{ alignItems: "center", margin: 20 }}>
-                        <Button title="Place order" onPress={confirmOrder} />
-                    </View>
+        <View style={styles.surface}>
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+
+                <View style={styles.topBar}>
+                    <TouchableOpacity style={[styles.topBarBtn, styles.backBtn]} onPress={() => navigation.goBack()} activeOpacity={0.75}>
+                        <Ionicons name="arrow-back" size={18} color={COLORS.primary} />
+                        <Text style={styles.backBtnText}>Back</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.topBarBtn, styles.cancelBtn]} onPress={() => navigation.navigate("Home")} activeOpacity={0.75}>
+                        <Ionicons name="close-circle-outline" size={18} color={COLORS.danger} />
+                        <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
                 </View>
+
+                <Text style={styles.heading}>Confirm Order</Text>
+
+                <View style={styles.shippingCard}>
+                    <Text style={styles.sectionLabel}>Shipping To</Text>
+                    <AddressRow icon="location-outline"  label="Address"    value={order.shippingAddress1} />
+                    {order.shippingAddress2 ? <><View style={styles.divider} /><AddressRow icon="business-outline" label="Address 2" value={order.shippingAddress2} /></> : null}
+                    <View style={styles.divider} />
+                    <AddressRow icon="map-outline"       label="City"       value={order.city} />
+                    <View style={styles.divider} />
+                    <AddressRow icon="mail-outline"      label="Zip Code"   value={order.zip} />
+                    <View style={styles.divider} />
+                    <AddressRow icon="globe-outline"     label="Country"    value={order.country} />
+                </View>
+
+                <View style={styles.itemsCard}>
+                    <Text style={styles.sectionLabel}>Items</Text>
+                    {order.orderItems?.map((item, idx) => (
+                        <React.Fragment key={item.id || item._id || idx}>
+                            <View style={styles.itemRow}>
+                                <View style={styles.itemImageWrap}>
+                                    <Image source={{ uri: item.image || FALLBACK_IMAGE }} style={styles.itemImage} resizeMode="cover" />
+                                </View>
+                                <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                                <Text style={styles.itemPrice}>₱{Number(item.price).toFixed(2)}</Text>
+                            </View>
+                            {idx < order.orderItems.length - 1 && <View style={styles.divider} />}
+                        </React.Fragment>
+                    ))}
+                </View>
+
+                <TouchableOpacity style={styles.placeOrderBtn} onPress={confirmOrder} activeOpacity={0.85}>
+                    <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.white} />
+                    <Text style={styles.placeOrderBtnText}>Place Order</Text>
+                </TouchableOpacity>
+
             </ScrollView>
-        </Surface>
+        </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: {
-        minHeight: height,
-        padding: 8,
-        alignContent: "center",
-        backgroundColor: "#f5f5f5",
-    },
-    titleContainer: {
-        justifyContent: "center",
-        alignItems: "center",
-        margin: 8,
-    },
-    title: {
-        alignSelf: "center",
-        margin: 8,
-        fontSize: 16,
-        fontWeight: "bold",
-        color: "#1a1a1a",
-    },
-});
 
 export default Confirm;
