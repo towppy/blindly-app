@@ -6,9 +6,24 @@ import Confirm from "../Screens/Checkout/Confirm";
 
 const Tab = createMaterialTopTabNavigator();
 
+
 function MyTabs() {
     return (
-        <Tab.Navigator>
+        <Tab.Navigator
+            screenOptions={{
+                tabBarPressColor: 'transparent',
+                tabBarPressOpacity: 1,
+                tabBarAllowFontScaling: true,
+                tabBarIndicatorStyle: { backgroundColor: 'transparent' },
+                tabBarStyle: { pointerEvents: 'none' },
+            }}
+            // Prevent tab press
+            screenListeners={{
+                tabPress: (e) => {
+                    e.preventDefault();
+                },
+            }}
+        >
             <Tab.Screen name="Shipping" component={Checkout} />
             <Tab.Screen name="Payment" component={Payment} />
             <Tab.Screen name="Confirm" component={Confirm} />

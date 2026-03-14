@@ -14,6 +14,17 @@ const { OAuth2Client } = require('google-auth-library');
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '<YOUR_GOOGLE_CLIENT_ID>';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
+// Nodemailer setup (Mailtrap)
+const nodemailer = require('nodemailer');
+const transporter = nodemailer.createTransport({
+  host: process.env.MAIL_HOST,
+  port: process.env.MAIL_PORT,
+  auth: {
+    user: process.env.MAIL_USERNAME,
+    pass: process.env.MAIL_PASSWORD,
+  },
+});
+
 function toBoolean(value) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") return value.toLowerCase() === "true";
@@ -74,6 +85,21 @@ router.post("/register", upload.single("image"), async (req, res) => {
       image,
       isAdmin,
       firebaseUid: firebaseUser.uid,
+    });
+
+    // Send welcome email
+    const mailOptions = {
+      from: 'noreply@blindly.com',
+      to: user.email,
+      subject: 'Welcome to Blindly!',
+      text: `Hi ${user.name},\n\nThank you for registering at Blindly!`,
+    };
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.error('Email send error:', error);
+      } else {
+        console.log('Email sent:', info.response);
+      }
     });
 
     return res.status(201).json({
