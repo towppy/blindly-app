@@ -1,0 +1,301 @@
+import { StyleSheet } from "react-native";
+
+// ─── Design Tokens ────────────────────────────────────────────────────────────
+export const COLORS = {
+    primary:        "#7c3aed",
+    primaryDeep:    "#5b21b6",
+    primaryLight:   "#ede9f8",
+    primaryLighter: "#f0ecfb",
+    primarySoft:    "#e4dff5",
+    background:     "#faf9f7",
+    card:           "#fff",
+    textDark:       "#1a1235",
+    textMuted:      "#7c6aaa",
+    textSubtle:     "#9b8ec4",
+    textFaint:      "#b0a3d4",
+    white:          "#fff",
+    success:        "#10b981",
+    successLight:   "#f0fdf4",
+    warning:        "#f59e0b",
+    warningLight:   "#fffbeb",
+    danger:         "#ef4444",
+    dangerLight:    "#fef2f2",
+};
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+
+    // ── Layout ────────────────────────────────────────────────────────────────
+    container: {
+        flex: 1,
+        alignItems: "center",
+        backgroundColor: COLORS.background,
+    },
+    subContainer: {
+        alignItems: "center",
+        marginTop: 24,
+        paddingBottom: 48,
+        paddingHorizontal: 16,
+    },
+
+    // ── Profile image ─────────────────────────────────────────────────────────
+    profileImageContainer: {
+        position: "relative",
+        marginBottom: 14,
+    },
+    profileImage: {
+        width: 110,
+        height: 110,
+        borderRadius: 55,
+        borderWidth: 3,
+        borderColor: COLORS.primary,
+    },
+    profileImagePlaceholder: {
+        width: 110,
+        height: 110,
+        borderRadius: 55,
+        backgroundColor: COLORS.primaryLight,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 2,
+        borderColor: COLORS.primarySoft,
+        borderStyle: "dashed",
+    },
+    profileImagePlaceholderText: {
+        color: COLORS.textSubtle,
+        fontSize: 12,
+        fontWeight: "600",
+        textAlign: "center",
+        paddingHorizontal: 8,
+    },
+    cameraIconOverlay: {
+        position: "absolute",
+        right: 0,
+        bottom: 0,
+        backgroundColor: COLORS.primary,
+        padding: 7,
+        borderRadius: 18,
+        borderWidth: 2,
+        borderColor: COLORS.white,
+        elevation: 4,
+        shadowColor: COLORS.primaryDeep,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+    },
+
+    // ── Name ──────────────────────────────────────────────────────────────────
+    nameText: {
+        fontSize: 26,
+        fontWeight: "800",
+        color: COLORS.textDark,
+        letterSpacing: -0.5,
+        marginBottom: 2,
+    },
+
+    // ── Badges ────────────────────────────────────────────────────────────────
+    adminBadge: {
+        backgroundColor: COLORS.primary,
+        borderRadius: 20,
+        paddingHorizontal: 14,
+        paddingVertical: 4,
+        marginTop: 6,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        elevation: 3,
+    },
+    adminBadgeText: {
+        color: COLORS.white,
+        fontWeight: "800",
+        fontSize: 11,
+        letterSpacing: 1.5,
+    },
+    completionBadge: {
+        borderRadius: 20,
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        marginTop: 10,
+    },
+    completeBadge: {
+        backgroundColor: COLORS.successLight,
+        borderWidth: 1.5,
+        borderColor: COLORS.success,
+    },
+    incompleteBadge: {
+        backgroundColor: COLORS.warningLight,
+        borderWidth: 1.5,
+        borderColor: COLORS.warning,
+    },
+    completionBadgeText: {
+        fontWeight: "700",
+        fontSize: 13,
+        letterSpacing: 0.2,
+    },
+    completeBadgeText: {
+        color: COLORS.success,
+    },
+    incompleteBadgeText: {
+        color: COLORS.warning,
+    },
+    missingFieldsText: {
+        marginTop: 6,
+        color: COLORS.warning,
+        fontSize: 12,
+        fontWeight: "500",
+        textAlign: "center",
+        paddingHorizontal: 16,
+    },
+
+    // ── Section headers ───────────────────────────────────────────────────────
+    sectionHeader: {
+        fontSize: 11,
+        fontWeight: "800",
+        color: COLORS.textSubtle,
+        textTransform: "uppercase",
+        letterSpacing: 1.4,
+        alignSelf: "flex-start",
+        marginLeft: "6%",
+        marginTop: 24,
+        marginBottom: 8,
+    },
+    emailText: {
+        fontSize: 14,
+        color: COLORS.textMuted,
+        fontWeight: "500",
+        marginBottom: 6,
+    },
+
+    // ── Form area ─────────────────────────────────────────────────────────────
+    formBlock: {
+        marginTop: 20,
+        width: "100%",
+        alignItems: "center",
+    },
+    saveWrapper: {
+        width: "88%",
+        marginTop: 10,
+        marginBottom: 4,
+    },
+    saveBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: COLORS.primary,
+        borderRadius: 14,
+        paddingVertical: 14,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.38,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    saveBtnDisabled: {
+        opacity: 0.6,
+    },
+    saveBtnText: {
+        color: COLORS.white,
+        fontSize: 15,
+        fontWeight: "800",
+        letterSpacing: 0.2,
+    },
+
+    // ── Map button ────────────────────────────────────────────────────────────
+    mapButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: COLORS.primaryLight,
+        borderWidth: 1.5,
+        borderColor: COLORS.primarySoft,
+        marginHorizontal: "6%",
+        marginVertical: 10,
+        paddingVertical: 12,
+        borderRadius: 12,
+        width: "88%",
+        gap: 8,
+    },
+    mapButtonText: {
+        color: COLORS.primary,
+        fontWeight: "700",
+        fontSize: 14,
+    },
+
+    // ── Change password toggle ────────────────────────────────────────────────
+    changePasswordToggle: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 20,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: COLORS.primaryLighter,
+        borderRadius: 12,
+        borderWidth: 1.5,
+        borderColor: COLORS.primarySoft,
+        width: "88%",
+        gap: 8,
+    },
+    changePasswordToggleText: {
+        color: COLORS.primary,
+        fontWeight: "700",
+        fontSize: 14,
+    },
+    changePasswordBlock: {
+        width: "100%",
+        alignItems: "center",
+    },
+    updatePasswordWrapper: {
+        width: "88%",
+        marginTop: 4,
+        marginBottom: 8,
+    },
+    updatePasswordBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: COLORS.primaryDeep,
+        borderRadius: 14,
+        paddingVertical: 13,
+        shadowColor: COLORS.primaryDeep,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.35,
+        shadowRadius: 7,
+        elevation: 3,
+    },
+    updatePasswordBtnDisabled: {
+        opacity: 0.6,
+    },
+    updatePasswordBtnText: {
+        color: COLORS.white,
+        fontSize: 15,
+        fontWeight: "800",
+    },
+
+    // ── Logout ────────────────────────────────────────────────────────────────
+    logoutBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: COLORS.danger,
+        borderRadius: 14,
+        paddingVertical: 14,
+        width: "88%",
+        marginTop: 28,
+        marginBottom: 16,
+        shadowColor: COLORS.danger,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.3,
+        shadowRadius: 7,
+        elevation: 3,
+    },
+    logoutBtnText: {
+        color: COLORS.white,
+        fontSize: 15,
+        fontWeight: "800",
+        letterSpacing: 0.2,
+    },
+});
+
+export default styles;
