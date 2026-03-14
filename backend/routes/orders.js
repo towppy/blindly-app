@@ -211,7 +211,7 @@ router.put("/:id", authJwt, async (req, res) => {
       await sendToTokens(recipientTokens, {
         title: "Order status updated",
         body: `Order ${updated.id} is now ${desiredStatus}.`,
-        data: { orderId: updated.id, status: desiredStatus },
+        data: { screen: "MyOrders", orderId: updated.id, status: desiredStatus },
       });
     }
 

@@ -5,6 +5,10 @@ import FormContainer from "../../Shared/FormContainer";
 import AuthGlobal from "../../Context/Store/AuthGlobal";
 import { loginUser } from "../../Context/Actions/Auth.actions";
 import Input from "../../Shared/Input";
+import * as Google from 'expo-auth-session/providers/google';
+import Toast from "react-native-toast-message";
+import axios from "axios";
+import baseURL from "../../assets/common/baseurl";
 
 const Login = () => {
     const context = useContext(AuthGlobal);
@@ -13,6 +17,12 @@ const Login = () => {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [request, response, promptAsync] = Google.useAuthRequest({
+        expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        androidClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    });
 
     const handleSubmit = () => {
         const user = { email, password };
@@ -30,6 +40,37 @@ const Login = () => {
             navigation.navigate("User Profile");
         }
     }, [context.stateUser.isAuthenticated]);
+
+    useEffect(() => {
+        if (response?.type === 'success') {
+            const { id_token } = response.params;
+            if (id_token) {
+                setIsSubmitting(true);
+                axios.post(`${baseURL}users/google-login`, { idToken: id_token })
+                    .then((res) => {
+                        Toast.show({
+                            topOffset: 60,
+                            type: 'success',
+                            text1: 'Google login successful',
+                            text2: 'You are now signed in',
+                        });
+                        // You may want to dispatch loginUser here with the returned token
+                        // or navigate to the profile screen
+                    })
+                    .catch((err) => {
+                        Toast.show({
+                            position: 'bottom',
+                            bottomOffset: 20,
+                            type: 'error',
+                            text1: 'Google sign-in failed',
+                            text2: 'Please try again',
+                        });
+                        console.log(err);
+                    })
+                    .finally(() => setIsSubmitting(false));
+            }
+        }
+    }, [response]);
 
     return (
         <FormContainer title="Login">
@@ -62,6 +103,13 @@ const Login = () => {
                     </View>
                 ) : null}
                 <Button title="Login" onPress={() => handleSubmit()} disabled={isSubmitting} />
+            </View>
+            <View style={styles.buttonGroup}>
+                <Button
+                    title="Sign In with Google"
+                    onPress={() => promptAsync()}
+                    disabled={isSubmitting}
+                />
             </View>
             <View style={styles.buttonGroup}>
                 <Text style={styles.middleText}>Don't have an account yet?</Text>

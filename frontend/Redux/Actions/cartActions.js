@@ -60,3 +60,17 @@ export const clearCart = (userId) => {
         console.log('[Cart] Cleared from SQLite for user', userId);
     };
 };
+
+// Thunk: Update cart item quantity and persist to SQLite for a user
+export const updateCartItemQuantity = (item, quantity, userId) => {
+    return async (dispatch, getState) => {
+        if (!userId) return;
+        // Update the item in Redux state
+        const updatedItem = { ...item, quantity };
+        // Remove the old item and add the updated one
+        dispatch({ type: REMOVE_FROM_CART, payload: item });
+        dispatch({ type: ADD_TO_CART, payload: updatedItem });
+        // Persist to SQLite
+        await addCartItem(updatedItem, userId);
+    };
+};

@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "frontend-expo",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -29,7 +30,8 @@
     "extra": {
       "eas": {
         "projectId": "6f747b51-b33e-4c6e-9d11-89bf760ec81a"
-      }
+      },
+      "googleClientId": "983469817404-d7225crk182q0s7n3ut5n73jdjhvjf7u.apps.googleusercontent.com"
     },
     "plugins": [
       "expo-sqlite",

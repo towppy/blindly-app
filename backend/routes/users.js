@@ -10,6 +10,9 @@ const upload = require("../helpers/upload");
 
 const firebaseAdmin = require("../config/firebase");
 const router = express.Router();
+const { OAuth2Client } = require('google-auth-library');
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '<YOUR_GOOGLE_CLIENT_ID>';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 function toBoolean(value) {
   if (typeof value === "boolean") return value;
@@ -369,6 +372,73 @@ router.get("/:id", authJwt, async (req, res) => {
     return res.status(200).json(user.toJSON());
   } catch (_error) {
     return res.status(500).json({ message: "Failed to load user profile" });
+  }
+});
+
+// Google Sign-In endpoint
+router.post('/google-login', async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ message: 'idToken is required' });
+    }
+
+    // Verify Google ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { email, name, picture, sub } = payload;
+    if (!email) {
+      return res.status(400).json({ message: 'Google account must have an email' });
+    }
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Check if user exists in MongoDB
+    let user = await User.findOne({ email: normalizedEmail });
+    let firebaseUser;
+    if (!user) {
+      // Create user in Firebase Auth if not exists
+      try {
+        firebaseUser = await firebaseAdmin.auth().getUserByEmail(normalizedEmail);
+      } catch (e) {
+        firebaseUser = await firebaseAdmin.auth().createUser({
+          email: normalizedEmail,
+          displayName: name,
+          photoURL: picture,
+        });
+      }
+      // Save user in MongoDB
+      user = await User.create({
+        name: name || normalizedEmail,
+        email: normalizedEmail,
+        passwordHash: '', // No password for Google users
+        phone: '',
+        image: picture || '',
+        isAdmin: false,
+        firebaseUid: firebaseUser ? firebaseUser.uid : undefined,
+      });
+    } else if (!user.firebaseUid) {
+      // Link to Firebase if not already linked
+      try {
+        firebaseUser = await firebaseAdmin.auth().getUserByEmail(normalizedEmail);
+        user.firebaseUid = firebaseUser.uid;
+        await user.save();
+      } catch (e) {}
+    }
+
+    // Issue JWT
+    const jwtPayload = {
+      userId: user.id,
+      email: user.email,
+      isAdmin: user.isAdmin,
+    };
+    const token = jwt.sign(jwtPayload, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+    return res.status(200).json({ token, user: jwtPayload });
+  } catch (err) {
+    console.error('[POST /google-login] Error:', err.message);
+    return res.status(500).json({ message: 'Google login failed' });
   }
 });
 

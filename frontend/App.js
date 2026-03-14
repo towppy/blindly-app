@@ -6,7 +6,9 @@
  */
 import { StyleSheet, Platform } from 'react-native';
 import React, { useContext, useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+// Navigation ref for global navigation (for notification taps)
+export const navigationRef = createNavigationContainerRef();
 import { Provider as PaperProvider } from 'react-native-paper';
 import { Provider, useDispatch } from 'react-redux';
 import store from './Redux/store';
@@ -63,6 +65,8 @@ function CartLoader({ children }) {
 }
 
 // Inner component that can access Auth context (it's INSIDE the <Auth> provider)
+
+import { useNavigation } from '@react-navigation/native';
 function AppInner() {
   const context = useContext(AuthGlobal);
 
@@ -192,11 +196,22 @@ function AppInner() {
     }
   }, [context?.stateUser?.isAuthenticated]);
 
+  // Notification tap handler: navigate to MyOrders if screen is set
+  useEffect(() => {
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      const screen = response.notification.request.content.data?.screen;
+      if (screen === "MyOrders" && navigationRef.isReady()) {
+        navigationRef.navigate('MyOrders');
+      }
+    });
+    return () => responseListener.remove();
+  }, []);
+
   return (
     <Provider store={store}>
       <SQLiteProvider databaseName="blindly_cart.db" onInit={migrateDatabase}>
         <CartLoader>
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
           <PaperProvider>
             <DrawerNavigator />
           </PaperProvider>

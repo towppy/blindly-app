@@ -1,188 +1,268 @@
 import { StyleSheet, Dimensions } from "react-native";
 
-const { width, height } = Dimensions.get("window");
-
-const colors = {
-  primary: "#4F3466",      // Deep purple - main brand color
-  secondary: "#947CAC",    // Muted purple - secondary elements
-  accent: "#A580A6",       // Dusty lavender - accents
-  light: "#CABCD7",        // Soft lavender - backgrounds
-  lighter: "#D2C9D4",      // Pale lavender - highlights
-  white: "#FFFFFF",
-  black: "#000000",
-  text: "#333333",
-  textLight: "#666666",
-  border: "#E0E0E0",
-  error: "#FF6B6B",
-  success: "#4CAF50",
-};
+const { width } = Dimensions.get("window");
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.lighter,
-  },
-  surface: {
-    flex: 1,
-    backgroundColor: colors.lighter,
-  },
-  searchContainer: {
-    backgroundColor: colors.white,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.light,
-    elevation: 2,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  searchbar: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.light,
-    borderRadius: 8,
-    elevation: 0,
-  },
-  scrollView: {
-    flex: 1,
-    backgroundColor: colors.lighter,
-  },
-  bannerContainer: {
-    marginBottom: 8,
-  },
-  categoryContainer: {
-    backgroundColor: colors.white,
-    paddingVertical: 12,
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.light,
-  },
-  listContainer: {
+    surface: {
+        flex: 1,
+        backgroundColor: "#faf9f7",
+    },
+
+    // Header
+    header: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 8,
+        backgroundColor: "#faf9f7",
+    },
+    welcomeText: {
+        fontSize: 26,
+        fontWeight: "800",
+        color: "#1a1235",
+        letterSpacing: -0.5,
+    },
+    avatarBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: "#ede9f8",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    // Tabs
+    tabRow: {
+        flexDirection: "row",
+        paddingHorizontal: 20,
+        paddingBottom: 14,
+        gap: 8,
+    },
+    tab: {
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: "#f0ecfb",
+    },
+    tabActive: {
+        backgroundColor: "#7c3aed",
+    },
+    tabText: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#7c6aaa",
+    },
+    tabTextActive: {
+        color: "#fff",
+    },
+
+    // Search
+    searchRow: {
+        flexDirection: "row",
+        paddingHorizontal: 20,
+        marginBottom: 12,
+        gap: 10,
+        alignItems: "center",
+    },
+    searchContainer: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#f0ecfb",
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        height: 46,
+    },
+    searchIcon: {
+        marginRight: 8,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 15,
+        color: "#1a1235",
+        fontWeight: "500",
+    },
+    filterIconBtn: {
+        width: 46,
+        height: 46,
+        borderRadius: 14,
+        backgroundColor: "#7c3aed",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    // Price Filter
+    priceCard: {
+        marginHorizontal: 20,
+        marginBottom: 12,
+        backgroundColor: "#fff",
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: "#7c3aed",
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
+    },
+    priceLabel: {
+        fontSize: 13,
+        color: "#7c6aaa",
+        fontWeight: "600",
+        textAlign: "center",
+    },
+    priceValue: {
+        color: "#7c3aed",
+        fontWeight: "700",
+    },
+    priceActions: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginTop: 4,
+    },
+    priceReset: {
+        color: "#9b8ec4",
+        fontSize: 14,
+        fontWeight: "600",
+    },
+    applyBtn: {
+        backgroundColor: "#7c3aed",
+        paddingHorizontal: 22,
+        paddingVertical: 8,
+        borderRadius: 10,
+    },
+    applyText: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 14,
+    },
+
+    // Promo Button
+    promoBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#5b21b6",
+        borderRadius: 12,
+        paddingVertical: 11,
+        marginHorizontal: 20,
+        marginBottom: 12,
+    },
+    promoBtnText: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 14,
+    },
+
+    // Banner
+    bannerWrapper: {
+        marginBottom: 16,
+        borderRadius: 16,
+        overflow: "hidden",
+        marginHorizontal: 20,
+    },
+
+    // Help Banner
+    helpBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#7c3aed",
+        borderRadius: 16,
+        marginHorizontal: 20,
+        marginBottom: 18,
+        padding: 18,
+    },
+    helpTitle: {
+        fontSize: 20,
+        fontWeight: "800",
+        color: "#fff",
+        marginBottom: 2,
+    },
+    helpSub: {
+        fontSize: 13,
+        color: "rgba(255,255,255,0.8)",
+        fontWeight: "500",
+    },
+    helpIcon: {
+        width: 52,
+        height: 52,
+        borderRadius: 14,
+        backgroundColor: "#fff",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    // Section
+    sectionHeader: {
+        paddingHorizontal: 20,
+        marginBottom: 14,
+    },
+    sectionTitle: {
+        fontSize: 20,
+        fontWeight: "800",
+        color: "#1a1235",
+        letterSpacing: -0.3,
+    },
+
+    // Product List
+ 
+listContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
-    paddingHorizontal: 8,
-    paddingVertical: 16,
-    backgroundColor: colors.lighter,
-  },
-  productCard: {
-    width: width / 2 - 12,
-    marginBottom: 16,
-    backgroundColor: colors.white,
-    borderRadius: 8,
-    overflow: "hidden",
-    elevation: 2,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    borderWidth: 1,
-    borderColor: colors.light,
-  },
-  productImage: {
-    width: "100%",
-    height: 150,
-    backgroundColor: colors.light,
-  },
-  productInfo: {
-    padding: 8,
-  },
-  productName: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: colors.primary,
-    marginBottom: 4,
-  },
-  productPrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: colors.secondary,
-  },
-  productBrand: {
-    fontSize: 12,
-    color: colors.textLight,
-    marginBottom: 4,
-  },
-  noProductsContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: colors.lighter,
-  },
-  noProductsText: {
-    fontSize: 16,
-    color: colors.textLight,
-    textAlign: "center",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: colors.lighter,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: colors.secondary,
-  },
-  categoryFilterContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  categoryChip: {
-    marginRight: 8,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.light,
-  },
-  categoryChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  categoryChipText: {
-    color: colors.text,
-  },
-  categoryChipTextActive: {
-    color: colors.white,
-  },
-  searchedProductContainer: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: colors.lighter,
-  },
-  errorText: {
-    fontSize: 16,
-    color: colors.error,
-    textAlign: "center",
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 5,
-  },
-  retryButtonText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  center: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
+    paddingHorizontal: 12, // Slightly reduced padding
+    justifyContent: "flex-start", // Changed from "space-between"
+    gap: 12, // Consistent gap between items
+},
+
+    // Empty
+    center: {
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+    },
+    emptyText: {
+        color: "#b0a3d4",
+        fontSize: 15,
+        fontWeight: "600",
+    },
+
+    // MultiSlider
+    sliderContainer: {
+        alignItems: "center",
+        marginVertical: 8,
+    },
+    sliderTrack: {
+        height: 4,
+        borderRadius: 2,
+    },
+    sliderSelected: {
+        backgroundColor: "#7c3aed",
+    },
+    sliderUnselected: {
+        backgroundColor: "#e4dff5",
+    },
+    sliderMarker: {
+        backgroundColor: "#7c3aed",
+        height: 22,
+        width: 22,
+        borderRadius: 11,
+        shadowColor: "#7c3aed",
+        shadowOpacity: 0.4,
+        shadowRadius: 4,
+        elevation: 4,
+    },
+    sliderWrapper: {
+        height: 40,
+        width: width * 0.72,
+    },
+    sliderTouch: {
+        height: 40,
+        width: 40,
+        borderRadius: 20,
+        slipDisplacement: 40,
+    },
 });
 
-export default {
-  styles,
-  colors,
-};
+export default styles;

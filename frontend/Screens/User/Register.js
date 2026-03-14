@@ -16,7 +16,7 @@ import Input from "../../Shared/Input";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
 import Toast from "react-native-toast-message";
-import { Camera } from "expo-camera";
+import * as Google from "expo-auth-session/providers/google";
 import { Ionicons } from "@expo/vector-icons";
 import mime from "mime";
 import * as ImagePicker from "expo-image-picker";
@@ -153,6 +153,43 @@ const Register = () => {
         }
     };
 
+    const [request, response, promptAsync] = Google.useAuthRequest({
+        expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        androidClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    });
+
+    useEffect(() => {
+        if (response?.type === "success") {
+            const { id_token } = response.params;
+            if (id_token) {
+                setIsSubmitting(true);
+                axios.post(`${baseURL}users/google-login`, { idToken: id_token })
+                    .then((res) => {
+                        Toast.show({
+                            topOffset: 60,
+                            type: "success",
+                            text1: "Google account registered",
+                            text2: "You are now signed in",
+                        });
+                        setTimeout(() => navigation.navigate("Login"), 500);
+                    })
+                    .catch((err) => {
+                        Toast.show({
+                            position: "bottom",
+                            bottomOffset: 20,
+                            type: "error",
+                            text1: "Google sign-in failed",
+                            text2: "Please try again",
+                        });
+                        console.log(err);
+                    })
+                    .finally(() => setIsSubmitting(false));
+            }
+        }
+    }, [response]);
+
     useEffect(() => {
         (async () => {
             const cameraStatus = await Camera.requestCameraPermissionsAsync();
@@ -229,6 +266,13 @@ const Register = () => {
                 </View>
                 <View>
                     <Button title="Register" onPress={() => register()} disabled={isSubmitting} />
+                </View>
+                <View style={styles.buttonGroup}>
+                    <Button
+                        title="Sign Up with Google"
+                        onPress={() => promptAsync()}
+                        disabled={isSubmitting}
+                    />
                 </View>
             </FormContainer>
         </KeyboardAwareScrollView>
