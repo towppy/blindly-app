@@ -126,7 +126,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // POST /products — admin only, multipart
-router.post("/", authJwt, upload.single("image"), async (req, res) => {
+router.post("/", authJwt, upload.array("images", 10), async (req, res) => {
   try {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
@@ -136,13 +136,19 @@ router.post("/", authJwt, upload.single("image"), async (req, res) => {
     if (!name || !brand || !price || !category || countInStock === undefined) {
       return res.status(400).json({ message: "name, brand, price, category and countInStock are required" });
     }
-    const image = req.file ? buildImageUrl(req, req.file.filename) : "";
+    let image = "";
+    let images = [];
+    if (req.files && req.files.length > 0) {
+      images = req.files.map((f) => buildImageUrl(req, f.filename));
+      image = images[0];
+    }
     const product = await Product.create({
       name, brand, price: Number(price), description, richDescription,
       category, countInStock: Number(countInStock),
       rating: Number(rating || 0), numReviews: Number(numReviews || 0),
       isFeatured: isFeatured === "true" || isFeatured === true,
       image,
+      images,
     });
     const populated = await product.populate("category", "id name color");
     await updateStockAlerts(product);
@@ -154,7 +160,7 @@ router.post("/", authJwt, upload.single("image"), async (req, res) => {
 });
 
 // PUT /products/:id — admin only, multipart
-router.put("/:id", authJwt, upload.single("image"), async (req, res) => {
+router.put("/:id", authJwt, upload.array("images", 10), async (req, res) => {
   try {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
@@ -164,7 +170,13 @@ router.put("/:id", authJwt, upload.single("image"), async (req, res) => {
 
     const { name, brand, price, description, richDescription, category,
             countInStock, rating, numReviews, isFeatured } = req.body;
-    const image = req.file ? buildImageUrl(req, req.file.filename) : existing.image;
+
+    let image = existing.image;
+    let images = existing.images || [];
+    if (req.files && req.files.length > 0) {
+      images = req.files.map((f) => buildImageUrl(req, f.filename));
+      image = images[0];
+    }
 
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
@@ -180,6 +192,7 @@ router.put("/:id", authJwt, upload.single("image"), async (req, res) => {
         numReviews: numReviews !== undefined ? Number(numReviews) : existing.numReviews,
         isFeatured: isFeatured !== undefined ? (isFeatured === "true" || isFeatured === true) : existing.isFeatured,
         image,
+        images,
       },
       { new: true }
     ).populate("category", "id name color");

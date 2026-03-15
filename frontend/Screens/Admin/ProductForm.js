@@ -8,6 +8,7 @@ import {
     Platform,
     ActivityIndicator,
     Alert,
+    ScrollView,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import FormContainer from "../../Shared/FormContainer";
@@ -29,7 +30,7 @@ const ProductForm = (props) => {
     const [name, setName] = useState("");
     const [price, setPrice] = useState("");
     const [description, setDescription] = useState("");
-    const [image, setImage] = useState("");
+    const [images, setImages] = useState([]); // array of uris
     const [mainImage, setMainImage] = useState("");
     const [category, setCategory] = useState("");
     const [categories, setCategories] = useState([]);
@@ -53,8 +54,16 @@ const ProductForm = (props) => {
             setName(i.name || "");
             setPrice(String(i.price ?? ""));
             setDescription(i.description || "");
-            setMainImage(i.image || "");
-            setImage(i.image || "");
+            if (i.images && Array.isArray(i.images) && i.images.length > 0) {
+                setImages(i.images);
+                setMainImage(i.images[0]);
+            } else if (i.image) {
+                setImages([i.image]);
+                setMainImage(i.image);
+            } else {
+                setImages([]);
+                setMainImage("");
+            }
             const catId = i.category?._id || i.category?.id || "";
             setCategory(catId);
             setPickerValue(catId);
@@ -73,16 +82,23 @@ const ProductForm = (props) => {
     }, [props.route?.params]);
 
     const pickImage = async () => {
+        const allowsMultipleSelection = true;
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images"],
-            allowsEditing: true,
+            allowsMultipleSelection,
+            allowsEditing: !allowsMultipleSelection, // disables editing if multiple
             aspect: [4, 3],
             quality: 1,
         });
         if (!result.canceled) {
-            const uri = result.assets[0].uri;
-            setMainImage(uri);
-            setImage(uri);
+            let uris = [];
+            if (Array.isArray(result.assets)) {
+                uris = result.assets.map((a) => a.uri);
+            } else if (result.uri) {
+                uris = [result.uri];
+            }
+            setImages((prev) => uris.length > 1 ? [...prev, ...uris] : [...prev, ...uris]);
+            setMainImage(uris[0]);
             setImagePicked(true);
         }
     };
@@ -100,8 +116,8 @@ const ProductForm = (props) => {
         });
         if (!result.canceled) {
             const uri = result.assets[0].uri;
+            setImages((prev) => [...prev, uri]);
             setMainImage(uri);
-            setImage(uri);
             setImagePicked(true);
         }
     };
@@ -124,8 +140,6 @@ const ProductForm = (props) => {
             setError("Please fill in the form correctly");
             return;
         }
-        // Debug log for category
-        console.log("Submitting product with category:", category);
         setIsSubmitting(true);
         const formData = new FormData();
         formData.append("name", name);
@@ -138,12 +152,14 @@ const ProductForm = (props) => {
         formData.append("rating", rating);
         formData.append("numReviews", numReviews);
         formData.append("isFeatured", isFeatured);
-        if (imagePicked && image) {
-            const newImageUri = "file:///" + image.split("file:/").join("");
-            formData.append("image", {
-                uri: newImageUri,
-                type: mime.getType(newImageUri) || "image/jpeg",
-                name: newImageUri.split("/").pop(),
+        if (imagePicked && images.length > 0) {
+            images.forEach((imgUri, idx) => {
+                const newImageUri = "file:///" + imgUri.split("file:/").join("");
+                formData.append("images", {
+                    uri: newImageUri,
+                    type: mime.getType(newImageUri) || "image/jpeg",
+                    name: newImageUri.split("/").pop() || `image${idx}.jpg`,
+                });
             });
         }
         const config = {
@@ -175,11 +191,21 @@ const ProductForm = (props) => {
     return (
         <FormContainer title={item ? "Edit Product" : "Add Product"}>
             <View style={styles.imageContainer}>
-                <Image style={styles.image} source={mainImage ? { uri: mainImage } : null} />
+                {mainImage ? (
+                    <Image style={styles.image} source={{ uri: mainImage }} />
+                ) : null}
                 <TouchableOpacity onPress={showImageOptions} style={styles.imagePicker}>
                     <Ionicons name="camera" style={{ color: "white" }} />
                 </TouchableOpacity>
             </View>
+            {/* Preview all selected images */}
+            {images.length > 1 && (
+                <ScrollView horizontal style={{ marginVertical: 10 }}>
+                    {images.map((img, idx) => (
+                        <Image key={idx} source={{ uri: img }} style={{ width: 60, height: 60, borderRadius: 8, marginRight: 8 }} />
+                    ))}
+                </ScrollView>
+            )}
             <View style={styles.label}><Text style={styles.labelText}>Brand</Text></View>
             <Input placeholder="Brand" name="brand" id="brand" value={brand} onChangeText={setBrand} />
             <View style={styles.label}><Text style={styles.labelText}>Name</Text></View>

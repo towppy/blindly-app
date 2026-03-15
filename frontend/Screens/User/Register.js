@@ -16,6 +16,10 @@ import mime from "mime";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import styles, { COLORS } from "../../Shared/User/Register.styles";
+import * as WebBrowser from "expo-web-browser";
+import { makeRedirectUri } from "expo-auth-session";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const Register = () => {
     const [email, setEmail]         = useState("");
@@ -28,11 +32,17 @@ const Register = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigation = useNavigation();
 
+    // Log your client ID to make sure it's loaded
+    console.log("Google Client ID:", process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID);
+
     const [request, response, promptAsync] = Google.useAuthRequest({
-        expoClientId:    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        iosClientId:     process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
         androidClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        webClientId:     process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+        redirectUri: makeRedirectUri({
+            scheme: "exp", // This works with Expo Go
+        }),
     });
 
     useEffect(() => {
@@ -44,22 +54,67 @@ const Register = () => {
     }, []);
 
     useEffect(() => {
+        console.log("Google Response:", response);
+        
         if (response?.type === "success") {
-            const { id_token } = response.params;
-            if (id_token) {
+            console.log("Success! Params:", response.params);
+            console.log("Authentication:", response.authentication);
+            
+            const { authentication } = response;
+            
+            if (authentication?.accessToken) {
                 setIsSubmitting(true);
-                axios
-                    .post(`${baseURL}users/google-login`, { idToken: id_token })
-                    .then(() => {
-                        Toast.show({ topOffset: 60, type: "success", text1: "Google account registered", text2: "You are now signed in" });
-                        setTimeout(() => navigation.navigate("Login"), 500);
-                    })
-                    .catch((err) => {
-                        console.log(err);
-                        Toast.show({ topOffset: 60, type: "error", text1: "Google sign-in failed", text2: "Please try again" });
-                    })
-                    .finally(() => setIsSubmitting(false));
+                
+                // Get user info from Google
+                fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${authentication.accessToken}` },
+                })
+                .then(userInfoResponse => userInfoResponse.json())
+                .then(userInfo => {
+                    console.log("Google User Info:", userInfo);
+                    
+                    // Send to your backend
+                    return axios.post(`${baseURL}users/google-login`, {
+                        email: userInfo.email,
+                        name: userInfo.name,
+                        googleId: userInfo.sub,
+                        profilePicture: userInfo.picture,
+                        idToken: authentication.idToken || authentication.accessToken
+                    });
+                })
+                .then((res) => {
+                    console.log("Backend response:", res.data);
+                    Toast.show({ 
+                        topOffset: 60, 
+                        type: "success", 
+                        text1: "Google account registered", 
+                        text2: "You are now signed in" 
+                    });
+                    setTimeout(() => navigation.navigate("Login"), 500);
+                })
+                .catch((err) => {
+                    console.log("Error details:", {
+                        message: err.message,
+                        response: err.response?.data,
+                        status: err.response?.status
+                    });
+                    Toast.show({ 
+                        topOffset: 60, 
+                        type: "error", 
+                        text1: "Google sign-in failed", 
+                        text2: err?.response?.data?.message || "Please try again" 
+                    });
+                })
+                .finally(() => setIsSubmitting(false));
             }
+        } else if (response?.type === "error") {
+            console.log("Google Auth Error:", response.error);
+            Toast.show({ 
+                topOffset: 60, 
+                type: "error", 
+                text1: "Google sign-in failed", 
+                text2: response.error?.message || "Authentication failed" 
+            });
         }
     }, [response]);
 
@@ -194,7 +249,10 @@ const Register = () => {
                 {/* Google button */}
                 <TouchableOpacity
                     style={[styles.googleBtn, isSubmitting && styles.googleBtnDisabled]}
-                    onPress={() => promptAsync()}
+                    onPress={() => {
+                        console.log("Google button pressed");
+                        promptAsync();
+                    }}
                     disabled={isSubmitting}
                     activeOpacity={0.85}
                 >

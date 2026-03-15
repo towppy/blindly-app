@@ -2,12 +2,12 @@ import React, { useCallback, useState } from "react";
 import {
     View,
     Text,
-    StyleSheet,
     ActivityIndicator,
     ScrollView,
     RefreshControl,
     TouchableOpacity,
     Alert,
+    StatusBar,
 } from "react-native";
 import axios from "axios";
 import { useFocusEffect } from "@react-navigation/native";
@@ -16,22 +16,191 @@ import * as Sharing from "expo-sharing";
 import { Ionicons } from "@expo/vector-icons";
 import baseURL from "../../assets/common/baseurl";
 import { getJwt } from "../../assets/common/jwtStore";
-
-const STATUS_COLORS = {
-    pending:   "#e7e73c",
-    shipped:   "#f1660f",
-    delivered: "#00bb3e",
-    cancelled: "#ff0202",
-};
+import styles, { COLORS, STATUS_COLORS, STATUS_SOFT } from "../../Shared/Admin/Analytics.styles";
 
 const STATUSES = ["pending", "shipped", "delivered", "cancelled"];
 
+const TABS = [
+    { key: "overview", label: "Overview", icon: "grid-outline"        },
+    { key: "orders",   label: "Orders",   icon: "receipt-outline"      },
+    { key: "users",    label: "Users",    icon: "people-outline"        },
+];
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+const StatCard = ({ icon, label, value, color, soft }) => (
+    <View style={styles.statCard}>
+        <View style={[styles.statIconWrap, { backgroundColor: soft }]}>
+            <Ionicons name={icon} size={16} color={color} />
+        </View>
+        <Text style={styles.statNum}>{value}</Text>
+        <Text style={styles.statLabel}>{label}</Text>
+    </View>
+);
+
+// ─── Overview Tab ─────────────────────────────────────────────────────────────
+const OverviewTab = ({ orders, users, countByStatus, totalRevenue, maxCount }) => (
+    <>
+        {/* Revenue hero */}
+        <Text style={styles.sectionLabel}>Revenue</Text>
+        <View style={styles.revenueCard}>
+            <View>
+                <Text style={styles.revenueEyebrow}>Total Earned</Text>
+                <Text style={styles.revenueNum}>
+                    ₱{totalRevenue.toLocaleString("en", { minimumFractionDigits: 2 })}
+                </Text>
+                <Text style={styles.revenueSubtext}>Excludes cancelled orders</Text>
+            </View>
+            <View style={styles.revenueIconWrap}>
+                <Ionicons name="trending-up-outline" size={24} color={COLORS.white} />
+            </View>
+        </View>
+
+        {/* Quick stats */}
+        <Text style={styles.sectionLabel}>At a Glance</Text>
+        <View style={styles.statRow}>
+            <StatCard icon="receipt-outline"          label="Total Orders" value={orders.length}              color={COLORS.primary} soft={COLORS.primaryLight} />
+            <StatCard icon="people-outline"           label="Total Users"  value={users.length}               color={COLORS.blue}    soft={COLORS.blueSoft}    />
+        </View>
+        <View style={styles.statRow}>
+            <StatCard icon="time-outline"             label="Pending"      value={countByStatus.pending   || 0} color={COLORS.yellow} soft={COLORS.yellowSoft} />
+            <StatCard icon="checkmark-circle-outline" label="Delivered"    value={countByStatus.delivered || 0} color={COLORS.green}  soft={COLORS.greenSoft}  />
+        </View>
+
+        {/* Bar chart */}
+        <Text style={styles.sectionLabel}>Breakdown</Text>
+        <View style={styles.chartCard}>
+            <View style={styles.chartHeader}>
+                <Text style={styles.chartTitle}>Orders by Status</Text>
+                <Text style={styles.chartTotal}>{orders.length} total</Text>
+            </View>
+            {STATUSES.map((s) => {
+                const count = countByStatus[s] || 0;
+                const pct   = Math.round((count / maxCount) * 100);
+                return (
+                    <View key={s} style={styles.barRow}>
+                        <View style={styles.barTopRow}>
+                            <Text style={styles.barStatusLabel}>{s.charAt(0).toUpperCase() + s.slice(1)}</Text>
+                            <Text style={styles.barCountLabel}>{count}</Text>
+                        </View>
+                        <View style={styles.barTrack}>
+                            <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: STATUS_COLORS[s] }]} />
+                        </View>
+                    </View>
+                );
+            })}
+        </View>
+    </>
+);
+
+// ─── Orders Tab ───────────────────────────────────────────────────────────────
+const OrdersTab = ({ orders, countByStatus }) => (
+    <>
+        <Text style={styles.sectionLabel}>Order Stats</Text>
+        <View style={styles.statRow}>
+            <StatCard icon="time-outline"             label="Pending"   value={countByStatus.pending   || 0} color={COLORS.yellow} soft={COLORS.yellowSoft} />
+            <StatCard icon="car-outline"              label="Shipped"   value={countByStatus.shipped   || 0} color={COLORS.blue}   soft={COLORS.blueSoft}   />
+        </View>
+        <View style={styles.statRow}>
+            <StatCard icon="checkmark-circle-outline" label="Delivered" value={countByStatus.delivered || 0} color={COLORS.green}  soft={COLORS.greenSoft}  />
+            <StatCard icon="close-circle-outline"     label="Cancelled" value={countByStatus.cancelled || 0} color={COLORS.red}    soft={COLORS.redSoft}    />
+        </View>
+
+        <Text style={styles.sectionLabel}>Recent Orders</Text>
+        <View style={styles.ordersCard}>
+            <View style={styles.ordersCardHeader}>
+                <Text style={styles.ordersCardTitle}>Latest Activity</Text>
+                <Text style={styles.ordersCardCount}>Last {Math.min(orders.length, 20)}</Text>
+            </View>
+            {orders.slice(0, 20).map((o, idx) => {
+                const statusKey = (o.status || "pending").toLowerCase();
+                const isLast    = idx === Math.min(orders.length, 20) - 1;
+                return (
+                    <View key={o.id || o._id} style={[styles.orderRow, isLast && styles.orderRowLast]}>
+                        <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[statusKey] || COLORS.textFaint }]} />
+                        <Text style={styles.orderId} numberOfLines={1}>
+                            #{String(o.id || o._id || "").slice(-8)}
+                        </Text>
+                        <View style={[styles.statusPill, { backgroundColor: STATUS_SOFT[statusKey] || COLORS.primaryLight }]}>
+                            <Text style={[styles.statusPillText, { color: STATUS_COLORS[statusKey] }]}>
+                                {o.status || "pending"}
+                            </Text>
+                        </View>
+                        <Text style={styles.orderPrice}>
+                            ₱{Number(o.totalPrice || 0).toFixed(2)}
+                        </Text>
+                    </View>
+                );
+            })}
+        </View>
+    </>
+);
+
+// ─── Users Tab ────────────────────────────────────────────────────────────────
+const UsersTab = ({ users }) => {
+    const total    = users.length;
+    const active   = users.filter((u) => u.isActive !== false).length;
+    const inactive = users.filter((u) => u.isActive === false).length;
+    const admins   = users.filter((u) => u.isAdmin === true).length;
+
+    const avatarColors = [COLORS.primary, COLORS.blue, COLORS.green, COLORS.gold, COLORS.red];
+
+    return (
+        <>
+            <Text style={styles.sectionLabel}>User Stats</Text>
+            <View style={styles.statRow}>
+                <StatCard icon="people-outline" label="Total"    value={total}    color={COLORS.primary} soft={COLORS.primaryLight} />
+                <StatCard icon="shield-outline" label="Admins"   value={admins}   color={COLORS.blue}    soft={COLORS.blueSoft}    />
+            </View>
+            <View style={styles.statRow}>
+                <StatCard icon="person-outline" label="Active"   value={active}   color={COLORS.green} soft={COLORS.greenSoft} />
+                <StatCard icon="ban-outline"    label="Inactive" value={inactive} color={COLORS.red}   soft={COLORS.redSoft}   />
+            </View>
+
+            <Text style={styles.sectionLabel}>All Users</Text>
+            <View style={styles.usersCard}>
+                <View style={styles.ordersCardHeader}>
+                    <Text style={styles.ordersCardTitle}>User List</Text>
+                    <Text style={styles.ordersCardCount}>{total} total</Text>
+                </View>
+                {users.slice(0, 25).map((u, idx) => {
+                    const isLast   = idx === Math.min(users.length, 25) - 1;
+                    const initial  = (u.name || u.email || "?")[0].toUpperCase();
+                    const avatarBg = avatarColors[idx % avatarColors.length];
+                    return (
+                        <View key={u.id || u._id} style={[styles.userRow, isLast && styles.userRowLast]}>
+                            <View style={[styles.userAvatar, { backgroundColor: avatarBg }]}>
+                                <Text style={styles.userAvatarText}>{initial}</Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.userName} numberOfLines={1}>{u.name || "Unnamed"}</Text>
+                                <Text style={styles.userEmail} numberOfLines={1}>{u.email || ""}</Text>
+                            </View>
+                            {u.isAdmin && (
+                                <Text style={[styles.userBadge, { backgroundColor: COLORS.primaryLight, color: COLORS.primary }]}>
+                                    Admin
+                                </Text>
+                            )}
+                            {u.isActive === false && (
+                                <Text style={[styles.userBadge, { backgroundColor: COLORS.redSoft, color: COLORS.red }]}>
+                                    Inactive
+                                </Text>
+                            )}
+                        </View>
+                    );
+                })}
+            </View>
+        </>
+    );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const Analytics = () => {
-    const [orders, setOrders] = useState([]);
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [orders,     setOrders]     = useState([]);
+    const [users,      setUsers]      = useState([]);
+    const [loading,    setLoading]    = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [exporting, setExporting] = useState(false);
+    const [exporting,  setExporting]  = useState(false);
+    const [activeTab,  setActiveTab]  = useState("overview");
 
     const fetchData = useCallback(async (isRefresh = false) => {
         if (isRefresh) setRefreshing(true);
@@ -41,10 +210,10 @@ const Analytics = () => {
             const headers = { Authorization: `Bearer ${token || ""}` };
             const [ordersRes, usersRes] = await Promise.all([
                 axios.get(`${baseURL}orders`, { headers }),
-                axios.get(`${baseURL}users`, { headers }),
+                axios.get(`${baseURL}users`,  { headers }),
             ]);
             setOrders(ordersRes.data || []);
-            setUsers(usersRes.data || []);
+            setUsers(usersRes.data  || []);
         } catch (e) {
             console.log("[Analytics] error:", e.message);
         } finally {
@@ -53,302 +222,169 @@ const Analytics = () => {
         }
     }, []);
 
-    useFocusEffect(
-        useCallback(() => {
-            fetchData();
-        }, [fetchData])
-    );
+    useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 
     if (loading) {
         return (
             <View style={styles.center}>
-                <ActivityIndicator size="large" color="#7c3aed" />
+                <ActivityIndicator size="large" color={COLORS.primary} />
             </View>
         );
     }
 
+    // Derived
     const countByStatus = orders.reduce((acc, o) => {
         const s = (o.status || "pending").toLowerCase();
         acc[s] = (acc[s] || 0) + 1;
         return acc;
     }, {});
-
     const totalRevenue = orders
         .filter((o) => o.status?.toLowerCase() !== "cancelled")
         .reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
-
     const maxCount = Math.max(...STATUSES.map((s) => countByStatus[s] || 0), 1);
 
-    // User stats
-    const totalUsers = users.length;
-    const activeUsers = users.filter((u) => u.isActive !== false).length;
-    const inactiveUsers = users.filter((u) => u.isActive === false).length;
-    const adminUsers = users.filter((u) => u.isAdmin === true).length;
-
+    // PDF export
     const exportPDF = async () => {
         try {
             setExporting(true);
             const now = new Date().toLocaleString("en-US", {
-                month: "long", day: "numeric", year: "numeric",
-                hour: "2-digit", minute: "2-digit",
+                month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
             });
-
             const statusRows = STATUSES.map((s) => {
                 const count = countByStatus[s] || 0;
-                const color = STATUS_COLORS[s];
                 return `<tr>
-                    <td style="padding:8px 12px;">
-                        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle;"></span>
-                        ${s.charAt(0).toUpperCase() + s.slice(1)}
-                    </td>
+                    <td style="padding:8px 12px;">${s.charAt(0).toUpperCase() + s.slice(1)}</td>
                     <td style="padding:8px 12px;text-align:center;">${count}</td>
                     <td style="padding:8px 12px;text-align:right;">${orders.length > 0 ? ((count / orders.length) * 100).toFixed(1) : 0}%</td>
                 </tr>`;
             }).join("");
-
-            const recentRows = orders.slice(0, 20).map((o) => {
-                const s = (o.status || "pending").toLowerCase();
-                const color = STATUS_COLORS[s] || "#ccc";
-                return `<tr>
-                    <td style="padding:6px 12px;font-family:monospace;font-size:12px;">#${String(o.id || o._id || "").slice(-8)}</td>
-                    <td style="padding:6px 12px;">
-                        <span style="background:${color};color:#fff;border-radius:6px;padding:2px 8px;font-size:11px;">
-                            ${o.status || "pending"}
-                        </span>
-                    </td>
-                    <td style="padding:6px 12px;text-align:right;">$${Number(o.totalPrice || 0).toFixed(2)}</td>
-                </tr>`;
-            }).join("");
-
-            const html = `<!DOCTYPE html><html>
-<head>
-<meta charset="UTF-8"/>
-<style>
-  body{font-family:Arial,sans-serif;margin:0;padding:24px;color:#1a1a2e;background:#fff;}
-  h1{font-size:28px;color:#7c3aed;margin-bottom:4px;}
-  .subtitle{color:#666;font-size:13px;margin-bottom:24px;}
-  .section{margin-bottom:28px;}
-  h2{font-size:16px;color:#444;border-bottom:2px solid #7c3aed;padding-bottom:6px;margin-bottom:14px;}
-  .cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:0;}
-  .card{flex:1;min-width:120px;border-radius:10px;padding:14px 16px;color:#fff;text-align:center;}
-  .card .num{font-size:26px;font-weight:800;}
-  .card .lbl{font-size:11px;opacity:.9;margin-top:4px;}
-  table{width:100%;border-collapse:collapse;}
-  thead tr{background:#f3eeff;}
-  th{padding:10px 12px;text-align:left;font-size:13px;color:#7c3aed;}
-  tbody tr:nth-child(even){background:#fafafa;}
-  td{font-size:13px;color:#333;border-bottom:1px solid #eee;}
-  .footer{margin-top:32px;text-align:center;color:#999;font-size:11px;}
-</style>
-</head>
-<body>
-  <h1>Blindly Analytics Report</h1>
-  <div class="subtitle">Generated on ${now}</div>
-
-  <div class="section">
-    <h2>Order Summary</h2>
-    <div class="cards">
-      <div class="card" style="background:#7c3aed"><div class="num">${orders.length}</div><div class="lbl">Total Orders</div></div>
-      <div class="card" style="background:#2ECC71"><div class="num">$${totalRevenue.toFixed(2)}</div><div class="lbl">Total Revenue</div></div>
-      <div class="card" style="background:#E74C3C"><div class="num">${countByStatus.pending || 0}</div><div class="lbl">Pending</div></div>
-      <div class="card" style="background:#F1C40F"><div class="num">${countByStatus.shipped || 0}</div><div class="lbl">Shipped</div></div>
-      <div class="card" style="background:#00bb3e"><div class="num">${countByStatus.delivered || 0}</div><div class="lbl">Delivered</div></div>
-      <div class="card" style="background:#ff0202"><div class="num">${countByStatus.cancelled || 0}</div><div class="lbl">Cancelled</div></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>User Summary</h2>
-    <div class="cards">
-      <div class="card" style="background:#1976d2"><div class="num">${totalUsers}</div><div class="lbl">Total Users</div></div>
-      <div class="card" style="background:#2ECC71"><div class="num">${activeUsers}</div><div class="lbl">Active Users</div></div>
-      <div class="card" style="background:#E74C3C"><div class="num">${inactiveUsers}</div><div class="lbl">Inactive Users</div></div>
-      <div class="card" style="background:#e91e63"><div class="num">${adminUsers}</div><div class="lbl">Admins</div></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Orders by Status</h2>
-    <table>
-      <thead><tr><th>Status</th><th style="text-align:center;">Count</th><th style="text-align:right;">Share</th></tr></thead>
-      <tbody>${statusRows}</tbody>
-    </table>
-  </div>
-
-  <div class="section">
-    <h2>Recent Orders (Last 20)</h2>
-    <table>
-      <thead><tr><th>Order ID</th><th>Status</th><th style="text-align:right;">Total</th></tr></thead>
-      <tbody>${recentRows}</tbody>
-    </table>
-  </div>
-
-  <div class="footer">Blindly App &mdash; Admin Report &mdash; ${now}</div>
+            const recentRows = orders.slice(0, 20).map((o) => `<tr>
+                <td style="padding:6px 12px;font-family:monospace;">#${String(o.id || o._id || "").slice(-8)}</td>
+                <td style="padding:6px 12px;">${o.status || "pending"}</td>
+                <td style="padding:6px 12px;text-align:right;">₱${Number(o.totalPrice || 0).toFixed(2)}</td>
+            </tr>`).join("");
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<style>body{font-family:Arial,sans-serif;margin:0;padding:24px;color:#1a1235;}h1{font-size:24px;color:#7c3aed;}
+.sub{color:#888;font-size:12px;margin-bottom:20px;}h2{font-size:14px;border-bottom:2px solid #7c3aed;padding-bottom:4px;margin-bottom:10px;}
+.cards{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;}.card{flex:1;min-width:100px;border-radius:8px;padding:12px;color:#fff;text-align:center;}
+.card .n{font-size:20px;font-weight:800;}.card .l{font-size:10px;opacity:.85;}
+table{width:100%;border-collapse:collapse;}th{padding:8px 12px;background:#f3eeff;text-align:left;font-size:12px;color:#7c3aed;}
+td{font-size:12px;border-bottom:1px solid #eee;}.footer{margin-top:24px;text-align:center;color:#aaa;font-size:10px;}</style>
+</head><body>
+<h1>Analytics Report</h1><div class="sub">${now}</div>
+<h2>Orders</h2>
+<div class="cards">
+<div class="card" style="background:#7c3aed"><div class="n">${orders.length}</div><div class="l">Total</div></div>
+<div class="card" style="background:#d97706"><div class="n">₱${totalRevenue.toFixed(2)}</div><div class="l">Revenue</div></div>
+<div class="card" style="background:#b45309"><div class="n">${countByStatus.pending||0}</div><div class="l">Pending</div></div>
+<div class="card" style="background:#2563eb"><div class="n">${countByStatus.shipped||0}</div><div class="l">Shipped</div></div>
+<div class="card" style="background:#059669"><div class="n">${countByStatus.delivered||0}</div><div class="l">Delivered</div></div>
+<div class="card" style="background:#dc2626"><div class="n">${countByStatus.cancelled||0}</div><div class="l">Cancelled</div></div>
+</div>
+<h2>Status Breakdown</h2>
+<table><thead><tr><th>Status</th><th>Count</th><th>Share</th></tr></thead><tbody>${statusRows}</tbody></table>
+<h2>Recent Orders</h2>
+<table><thead><tr><th>ID</th><th>Status</th><th>Total</th></tr></thead><tbody>${recentRows}</tbody></table>
+<h2>Users</h2>
+<div class="cards">
+<div class="card" style="background:#2563eb"><div class="n">${users.length}</div><div class="l">Total</div></div>
+<div class="card" style="background:#059669"><div class="n">${users.filter(u=>u.isActive!==false).length}</div><div class="l">Active</div></div>
+<div class="card" style="background:#dc2626"><div class="n">${users.filter(u=>u.isActive===false).length}</div><div class="l">Inactive</div></div>
+<div class="card" style="background:#7c3aed"><div class="n">${users.filter(u=>u.isAdmin).length}</div><div class="l">Admins</div></div>
+</div>
+<div class="footer">Analytics Report &mdash; ${now}</div>
 </body></html>`;
-
             const { uri } = await Print.printToFileAsync({ html, base64: false });
             const canShare = await Sharing.isAvailableAsync();
             if (canShare) {
-                await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Export Analytics Report" });
+                await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Export Report" });
             } else {
                 Alert.alert("Saved", `PDF saved to:\n${uri}`);
             }
         } catch (e) {
-            console.log("[Analytics] PDF export error:", e.message);
-            Alert.alert("Export Failed", "Could not generate PDF. Try again.");
+            Alert.alert("Export Failed", "Could not generate PDF.");
         } finally {
             setExporting(false);
         }
     };
 
     return (
-        <ScrollView
-            style={styles.container}
-            refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={() => fetchData(true)} />
-            }
-        >
-            {/* Header row */}
-            <View style={styles.headerRow}>
-                <Text style={styles.heading}>Analytics</Text>
-                <TouchableOpacity
-                    style={[styles.exportBtn, exporting && { opacity: 0.6 }]}
-                    onPress={exportPDF}
-                    disabled={exporting}
-                >
-                    {exporting
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Ionicons name="document-text-outline" size={16} color="#fff" style={{ marginRight: 5 }} />
-                    }
-                    <Text style={styles.exportBtnText}>{exporting ? "Exporting..." : "Export PDF"}</Text>
-                </TouchableOpacity>
-            </View>
+        <View style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-            {/* Order summary cards */}
-            <Text style={styles.subheading}>Orders</Text>
-            <View style={styles.row}>
-                <View style={[styles.summaryCard, { backgroundColor: "#7c3aed" }]}>
-                    <Text style={styles.summaryNum}>{orders.length}</Text>
-                    <Text style={styles.summaryLabel}>Total Orders</Text>
-                </View>
-                <View style={[styles.summaryCard, { backgroundColor: "#2ECC71" }]}>
-                    <Text style={styles.summaryNum}>${totalRevenue.toFixed(2)}</Text>
-                    <Text style={styles.summaryLabel}>Revenue</Text>
-                </View>
-            </View>
-            <View style={styles.row}>
-                <View style={[styles.summaryCard, { backgroundColor: "#E74C3C" }]}>
-                    <Text style={styles.summaryNum}>{countByStatus.pending || 0}</Text>
-                    <Text style={styles.summaryLabel}>Pending</Text>
-                </View>
-                <View style={[styles.summaryCard, { backgroundColor: "#F1C40F" }]}>
-                    <Text style={styles.summaryNum}>{countByStatus.shipped || 0}</Text>
-                    <Text style={styles.summaryLabel}>Shipped</Text>
-                </View>
-            </View>
-
-            {/* User stats cards */}
-            <Text style={styles.subheading}>Users</Text>
-            <View style={styles.row}>
-                <View style={[styles.summaryCard, { backgroundColor: "#1976d2" }]}>
-                    <Text style={styles.summaryNum}>{totalUsers}</Text>
-                    <Text style={styles.summaryLabel}>Total Users</Text>
-                </View>
-                <View style={[styles.summaryCard, { backgroundColor: "#e91e63" }]}>
-                    <Text style={styles.summaryNum}>{adminUsers}</Text>
-                    <Text style={styles.summaryLabel}>Admins</Text>
-                </View>
-            </View>
-            <View style={styles.row}>
-                <View style={[styles.summaryCard, { backgroundColor: "#2ECC71" }]}>
-                    <Text style={styles.summaryNum}>{activeUsers}</Text>
-                    <Text style={styles.summaryLabel}>Active Users</Text>
-                </View>
-                <View style={[styles.summaryCard, { backgroundColor: "#E74C3C" }]}>
-                    <Text style={styles.summaryNum}>{inactiveUsers}</Text>
-                    <Text style={styles.summaryLabel}>Inactive Users</Text>
-                </View>
-            </View>
-
-            {/* Status bar chart */}
-            <Text style={styles.subheading}>Orders by Status</Text>
-            <View style={styles.chartContainer}>
-                {STATUSES.map((s) => {
-                    const count = countByStatus[s] || 0;
-                    const pct = Math.round((count / maxCount) * 100);
-                    return (
-                        <View key={s} style={styles.barRow}>
-                            <Text style={styles.barLabel}>
-                                {s.charAt(0).toUpperCase() + s.slice(1)}
-                            </Text>
-                            <View style={styles.barTrack}>
-                                <View
-                                    style={[
-                                        styles.barFill,
-                                        { width: `${pct}%`, backgroundColor: STATUS_COLORS[s] },
-                                    ]}
-                                />
-                            </View>
-                            <Text style={styles.barCount}>{count}</Text>
-                        </View>
-                    );
-                })}
-            </View>
-
-            {/* Recent orders */}
-            <Text style={styles.subheading}>Recent Orders</Text>
-            {orders.slice(0, 15).map((o) => {
-                const statusKey = (o.status || "pending").toLowerCase();
-                return (
-                    <View key={o.id || o._id} style={styles.orderRow}>
-                        <View
-                            style={[styles.dot, { backgroundColor: STATUS_COLORS[statusKey] || "#ccc" }]}
+            {/* ── Tab bar ── */}
+            <View style={styles.tabBar}>
+                {TABS.map((tab) => (
+                    <TouchableOpacity
+                        key={tab.key}
+                        style={[styles.tabItem, activeTab === tab.key && styles.tabItemActive]}
+                        onPress={() => setActiveTab(tab.key)}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons
+                            name={tab.icon}
+                            size={18}
+                            color={activeTab === tab.key ? COLORS.primary : COLORS.textFaint}
                         />
-                        <Text style={styles.orderId} numberOfLines={1}>
-                            #{String(o.id || o._id || "").slice(-8)}
+                        <Text style={[styles.tabLabel, activeTab === tab.key && styles.tabLabelActive]}>
+                            {tab.label}
                         </Text>
-                        <Text style={styles.orderStatus}>{o.status}</Text>
-                        <Text style={styles.orderPrice}>
-                            ${Number(o.totalPrice || 0).toFixed(2)}
+                    </TouchableOpacity>
+                ))}
+            </View>
+
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={() => fetchData(true)}
+                        tintColor={COLORS.primary}
+                    />
+                }
+            >
+                {/* ── Page header ── */}
+                <View style={styles.pageHeader}>
+                    <View>
+                        <Text style={styles.pageTitle}>
+                            {TABS.find((t) => t.key === activeTab)?.label}
                         </Text>
+                        <Text style={styles.pageSubtitle}>Pull down to refresh</Text>
                     </View>
-                );
-            })}
-            <View style={{ height: 40 }} />
-        </ScrollView>
+                    <TouchableOpacity
+                        style={[styles.exportBtn, exporting && { opacity: 0.6 }]}
+                        onPress={exportPDF}
+                        disabled={exporting}
+                    >
+                        {exporting
+                            ? <ActivityIndicator size="small" color={COLORS.white} />
+                            : <Ionicons name="document-text-outline" size={14} color={COLORS.white} />
+                        }
+                        <Text style={styles.exportBtnText}>{exporting ? "Exporting…" : "Export"}</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* ── Tab content ── */}
+                {activeTab === "overview" && (
+                    <OverviewTab
+                        orders={orders}
+                        users={users}
+                        countByStatus={countByStatus}
+                        totalRevenue={totalRevenue}
+                        maxCount={maxCount}
+                    />
+                )}
+                {activeTab === "orders" && (
+                    <OrdersTab orders={orders} countByStatus={countByStatus} />
+                )}
+                {activeTab === "users" && (
+                    <UsersTab users={users} />
+                )}
+
+            </ScrollView>
+        </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container:      { flex: 1, backgroundColor: "#f5f5f5", padding: 16 },
-    center:         { flex: 1, alignItems: "center", justifyContent: "center" },
-    headerRow:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
-    heading:        { fontSize: 22, fontWeight: "700", color: "#1a0a3c" },
-    exportBtn:      {
-        flexDirection: "row", alignItems: "center",
-        backgroundColor: "#7c3aed", borderRadius: 8,
-        paddingHorizontal: 14, paddingVertical: 8,
-    },
-    exportBtnText:  { color: "#fff", fontWeight: "700", fontSize: 13 },
-    subheading:     { fontSize: 16, fontWeight: "600", color: "#444", marginTop: 20, marginBottom: 10 },
-    row:            { flexDirection: "row", gap: 12, marginBottom: 8 },
-    summaryCard:    { flex: 1, borderRadius: 12, padding: 16, alignItems: "center" },
-    summaryNum:     { fontSize: 22, fontWeight: "800", color: "#fff" },
-    summaryLabel:   { fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 4 },
-    chartContainer: { backgroundColor: "#fff", borderRadius: 12, padding: 16, elevation: 2 },
-    barRow:         { flexDirection: "row", alignItems: "center", marginVertical: 6 },
-    barLabel:       { width: 80, fontSize: 13, color: "#444" },
-    barTrack:       { flex: 1, height: 18, backgroundColor: "#eee", borderRadius: 9, overflow: "hidden" },
-    barFill:        { height: "100%", borderRadius: 9 },
-    barCount:       { width: 30, textAlign: "right", fontSize: 13, color: "#444", marginLeft: 8 },
-    orderRow:       {
-        flexDirection: "row", alignItems: "center", backgroundColor: "#fff",
-        padding: 12, marginBottom: 6, borderRadius: 8, elevation: 1,
-    },
-    dot:            { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
-    orderId:        { flex: 1, color: "#333", fontFamily: "monospace" },
-    orderStatus:    { width: 75, fontSize: 12, color: "#666", textTransform: "capitalize" },
-    orderPrice:     { fontSize: 13, fontWeight: "600", color: "#1a0a3c" },
-});
 
 export default Analytics;

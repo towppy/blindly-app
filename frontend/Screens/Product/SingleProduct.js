@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useContext } from "react";
+import React, { useState, useCallback, useContext, useRef } from "react";
 import {
     Image, View, StyleSheet, Text, ScrollView,
     TouchableOpacity, TextInput, ActivityIndicator, Alert,
+    FlatList, Dimensions
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -180,14 +181,63 @@ const SingleProduct = ({ route }) => {
 
     const myReviewId = myReview ? (myReview.id || myReview._id) : null;
 
+    // Carousel logic
+    // Ensure imagesArr is always an array of strings
+    let imagesArr = [];
+    if (Array.isArray(item.images) && item.images.length > 0) {
+        imagesArr = item.images.filter(Boolean).map(String);
+    } else if (item.image) {
+        imagesArr = [String(item.image)];
+    } else {
+        imagesArr = [FALLBACK_IMAGE];
+    }
+    if (!Array.isArray(imagesArr) || imagesArr.length === 0) {
+        console.warn('[SingleProduct] imagesArr is not valid:', imagesArr);
+    }
+    const [activeIndex, setActiveIndex] = useState(0);
+    const flatListRef = useRef(null);
+    const windowWidth = Dimensions.get('window').width;
+
+    const onViewRef = useRef(({ viewableItems }) => {
+        if (viewableItems.length > 0) {
+            setActiveIndex(viewableItems[0].index || 0);
+        }
+    });
+    const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
+
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-            {/* Product Image */}
-            <Image
-                source={{ uri: item.image || FALLBACK_IMAGE }}
-                resizeMode="contain"
-                style={styles.image}
-            />
+            {/* Product Images Carousel with indicators */}
+            <View style={styles.carouselWrapper}>
+                <FlatList
+                    ref={flatListRef}
+                    data={imagesArr}
+                    keyExtractor={(img, idx) => img + idx}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={true}
+                    renderItem={({ item: img }) => (
+                        <Image
+                            source={{ uri: img || FALLBACK_IMAGE }}
+                            resizeMode="contain"
+                            style={[styles.image, { width: windowWidth }]}
+                        />
+                    )}
+                    onViewableItemsChanged={onViewRef.current}
+                    viewabilityConfig={viewConfigRef.current}
+                    initialNumToRender={1}
+                    windowSize={2}
+                />
+                {/* Dots indicator */}
+                <View style={styles.dotsContainer}>
+                    {imagesArr.map((_, idx) => (
+                        <View
+                            key={idx}
+                            style={[styles.dot, activeIndex === idx && styles.activeDot]}
+                        />
+                    ))}
+                </View>
+            </View>
 
             {/* Info block */}
             <View style={styles.infoBox}>
@@ -366,7 +416,11 @@ const SingleProduct = ({ route }) => {
 
 const styles = StyleSheet.create({
     container:       { flex: 1, backgroundColor: "#f5f5f5" },
-    image:           { width: "100%", height: 260, backgroundColor: "#fff" },
+    carouselWrapper: { width: "100%", height: 260, backgroundColor: "#fff", alignItems: 'center', justifyContent: 'center' },
+    image:           { height: 260, backgroundColor: "#fff", borderRadius: 8 },
+    dotsContainer:   { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', position: 'absolute', bottom: 10, left: 0, right: 0 },
+    dot:             { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ccc', marginHorizontal: 4 },
+    activeDot:       { backgroundColor: '#7c3aed', width: 12, height: 12, borderRadius: 6 },
 
     infoBox:         { backgroundColor: "#fff", padding: 20, marginBottom: 8 },
     name:            { fontSize: 22, fontWeight: "800", color: "#1a0a3c", marginBottom: 8 },
