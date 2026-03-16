@@ -2,6 +2,8 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
+const cloudinary = require("../config/cloudinary"); // You'll need to create this
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const authJwt = require("../middleware/authJwt");
 const Product = require("../models/Product");
 const StockAlert = require("../models/StockAlert");
@@ -11,18 +13,13 @@ const config = require("../config");
 
 const router = express.Router();
 
-const uploadPath = path.resolve(process.cwd(), config.uploadDir);
-fs.mkdirSync(uploadPath, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadPath),
-  filename: (_req, file, cb) => {
-    const safeBase = path
-      .parse(file.originalname)
-      .name.replace(/[^a-zA-Z0-9-_]/g, "_")
-      .slice(0, 50);
-    const ext = path.extname(file.originalname) || ".jpg";
-    cb(null, `${Date.now()}-${safeBase}${ext}`);
+// Configure Cloudinary storage
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "products",
+    allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+    transformation: [{ width: 1000, height: 1000, crop: "limit" }], // Optional: resize images
   },
 });
 
@@ -99,11 +96,6 @@ async function updateStockAlerts(product) {
   );
 }
 
-function buildImageUrl(req, filename) {
-  if (!filename) return "";
-  return `${req.protocol}://${req.get("host")}/${config.uploadDir}/${filename}`;
-}
-
 // GET /products — public, used by home screen
 router.get("/", async (_req, res) => {
   try {
@@ -136,12 +128,15 @@ router.post("/", authJwt, upload.array("images", 10), async (req, res) => {
     if (!name || !brand || !price || !category || countInStock === undefined) {
       return res.status(400).json({ message: "name, brand, price, category and countInStock are required" });
     }
+    
     let image = "";
     let images = [];
     if (req.files && req.files.length > 0) {
-      images = req.files.map((f) => buildImageUrl(req, f.filename));
+      // Cloudinary returns the secure URL in the path property
+      images = req.files.map((f) => f.path); // Cloudinary secure URL
       image = images[0];
     }
+    
     const product = await Product.create({
       name, brand, price: Number(price), description, richDescription,
       category, countInStock: Number(countInStock),
@@ -150,6 +145,7 @@ router.post("/", authJwt, upload.array("images", 10), async (req, res) => {
       image,
       images,
     });
+    
     const populated = await product.populate("category", "id name color");
     await updateStockAlerts(product);
     return res.status(201).json(populated);
@@ -171,13 +167,21 @@ router.put("/:id", authJwt, upload.array("images", 10), async (req, res) => {
     const { name, brand, price, description, richDescription, category,
             countInStock, rating, numReviews, isFeatured } = req.body;
 
-    let image = existing.image;
-    let images = existing.images || [];
-    if (req.files && req.files.length > 0) {
-      images = req.files.map((f) => buildImageUrl(req, f.filename));
-      image = images[0];
-    }
+  let image = existing.image;
+let images = existing.images || [];
 
+const existingImages = req.body.existingImages
+  ? (Array.isArray(req.body.existingImages) ? req.body.existingImages : [req.body.existingImages])
+  : [];
+
+if (req.files && req.files.length > 0) {
+  const newImages = req.files.map((f) => f.path);
+  images = [...existingImages, ...newImages];
+  image = images[0];
+} else if (existingImages.length > 0) {
+  images = existingImages;
+  image = images[0];
+}
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
       {
@@ -201,20 +205,56 @@ router.put("/:id", authJwt, upload.array("images", 10), async (req, res) => {
 
     return res.status(200).json(updated);
   } catch (error) {
-    console.error('[PUT /products/:id] Error:', error.message, error.stack);
+    console.error('[PUT /products/:id] Full error:', JSON.stringify(error, null, 2));
+    console.error('[PUT /products/:id] Message:', error.message);
+    console.error('[PUT /products/:id] Stack:', error.stack);
     return res.status(500).json({ message: "Failed to update product", error: error.message });
-  }
+}
 });
 
-// DELETE /products/:id — admin only, soft delete
+// Helper function to extract public_id from Cloudinary URL
+function extractPublicIdFromUrl(url) {
+  try {
+    // Cloudinary URL format: https://res.cloudinary.com/cloud-name/image/upload/v1234567890/folder/public_id.jpg
+    const matches = url.match(/\/upload\/(?:v\d+\/)?(.+?)\./);
+    if (matches && matches[1]) {
+      return matches[1];
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// DELETE /products/:id — admin only, soft delete with optional image cleanup
 router.delete("/:id", authJwt, async (req, res) => {
   try {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
+    
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    
+    // Optionally delete images from Cloudinary
+    // Uncomment if you want to delete images when product is deleted
+    /*
+    if (product.images && product.images.length > 0) {
+      for (const imageUrl of product.images) {
+        try {
+          const publicId = extractPublicIdFromUrl(imageUrl);
+          if (publicId) {
+            await cloudinary.uploader.destroy(publicId);
+          }
+        } catch (deleteError) {
+          console.error('Error deleting image from Cloudinary:', deleteError);
+        }
+      }
+    }
+    */
+    
     const deleted = await Product.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
-    if (!deleted) return res.status(404).json({ message: "Product not found" });
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, message: "Product deleted successfully" });
   } catch (_error) {
     return res.status(500).json({ message: "Failed to delete product" });
   }

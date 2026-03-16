@@ -111,27 +111,35 @@ const ListItem = ({ item, index, deleteProduct, isDeleting = false }) => {
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flexDirection: "row",
-        padding: 5,
-        width: width,
-    },
-    image: {
-        borderRadius: 50,
-        width: width / 6,
-        height: 20,
-        margin: 2,
-    },
-    item: {
-        flexWrap: "wrap",
-        margin: 3,
-        width: width / 6,
-    },
-    actions: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginLeft: 4,
-    },
+   container: {
+    flexDirection: "row",
+    padding: 5,
+    width: width,
+    alignItems: "center",
+},
+image: {
+    borderRadius: 50,
+    width: 36,
+    height: 36,
+    margin: 2,
+},
+item: {
+    flexWrap: "wrap",
+    margin: 3,
+    flex: 1,
+    fontSize: 12,
+},
+actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: 64,
+    justifyContent: "flex-end",
+    paddingRight: 4,
+},
+actionButton: {
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+},
     actionButton: {
         paddingHorizontal: 6,
         paddingVertical: 2,

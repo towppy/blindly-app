@@ -152,16 +152,24 @@ const ProductForm = (props) => {
         formData.append("rating", rating);
         formData.append("numReviews", numReviews);
         formData.append("isFeatured", isFeatured);
-        if (imagePicked && images.length > 0) {
-            images.forEach((imgUri, idx) => {
-                const newImageUri = "file:///" + imgUri.split("file:/").join("");
-                formData.append("images", {
-                    uri: newImageUri,
-                    type: mime.getType(newImageUri) || "image/jpeg",
-                    name: newImageUri.split("/").pop() || `image${idx}.jpg`,
-                });
-            });
-        }
+       const localImages = images.filter(uri => uri.startsWith("file://") || uri.startsWith("content://"));
+const remoteImages = images.filter(uri => uri.startsWith("http"));
+
+// Send existing Cloudinary URLs as-is so backend knows to keep them
+remoteImages.forEach((url) => {
+    formData.append("existingImages", url);
+});
+
+// Send new local images as file uploads
+if (localImages.length > 0) {
+    localImages.forEach((imgUri, idx) => {
+    formData.append("images", {
+        uri: imgUri,  // use URI directly, no manipulation
+        type: mime.getType(imgUri) || "image/jpeg",
+        name: imgUri.split("/").pop() || `image${idx}.jpg`,
+    });
+});
+}
         const config = {
             headers: {
                 "Content-Type": "multipart/form-data",
@@ -198,11 +206,24 @@ const ProductForm = (props) => {
                     <Ionicons name="camera" style={{ color: "white" }} />
                 </TouchableOpacity>
             </View>
-            {/* Preview all selected images */}
-            {images.length > 1 && (
+            {/* Preview all selected images with delete button */}
+            {images.length > 0 && (
                 <ScrollView horizontal style={{ marginVertical: 10 }}>
                     {images.map((img, idx) => (
-                        <Image key={idx} source={{ uri: img }} style={{ width: 60, height: 60, borderRadius: 8, marginRight: 8 }} />
+                        <View key={idx} style={{ position: "relative", marginRight: 8 }}>
+                            <Image source={{ uri: img }} style={{ width: 60, height: 60, borderRadius: 8 }} />
+                            <TouchableOpacity
+                                style={{ position: "absolute", top: 0, right: 0, backgroundColor: "#ff4444", borderRadius: 8, padding: 2 }}
+                                onPress={() => {
+                                    setImages((prev) => prev.filter((_, i) => i !== idx));
+                                    if (mainImage === img) {
+                                        setMainImage(images.length > 1 ? images[0] : "");
+                                    }
+                                }}
+                            >
+                                <Ionicons name="close" size={16} color="white" />
+                            </TouchableOpacity>
+                        </View>
                     ))}
                 </ScrollView>
             )}
