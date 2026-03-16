@@ -10,40 +10,30 @@ import Input from "../../Shared/Input";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
 import Toast from "react-native-toast-message";
-import * as Google from "expo-auth-session/providers/google";
 import { Ionicons } from "@expo/vector-icons";
 import mime from "mime";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import styles, { COLORS } from "../../Shared/User/Register.styles";
 import * as WebBrowser from "expo-web-browser";
-import { makeRedirectUri } from "expo-auth-session";
+import * as Linking from "expo-linking";
+import { jwtDecode } from "jwt-decode";
 
 WebBrowser.maybeCompleteAuthSession();
 
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
+const EXPO_PROXY_REDIRECT = "https://auth.expo.io/@towppy/frontend-expo";
+
 const Register = () => {
-    const [email, setEmail]         = useState("");
-    const [name, setName]           = useState("");
-    const [phone, setPhone]         = useState("");
-    const [password, setPassword]   = useState("");
-    const [error, setError]         = useState("");
-    const [image, setImage]         = useState(null);
+    const [email, setEmail] = useState("");
+    const [name, setName] = useState("");
+    const [phone, setPhone] = useState("");
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
+    const [image, setImage] = useState(null);
     const [mainImage, setMainImage] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigation = useNavigation();
-
-    // Log your client ID to make sure it's loaded
-    console.log("Google Client ID:", process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID);
-
-    const [request, response, promptAsync] = Google.useAuthRequest({
-        expoClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        androidClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        redirectUri: makeRedirectUri({
-            scheme: "exp", // This works with Expo Go
-        }),
-    });
 
     useEffect(() => {
         (async () => {
@@ -53,89 +43,112 @@ const Register = () => {
         })();
     }, []);
 
-    useEffect(() => {
-        console.log("Google Response:", response);
-        
-        if (response?.type === "success") {
-            console.log("Success! Params:", response.params);
-            console.log("Authentication:", response.authentication);
-            
-            const { authentication } = response;
-            
-            if (authentication?.accessToken) {
-                setIsSubmitting(true);
-                
-                // Get user info from Google
-                fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                    headers: { Authorization: `Bearer ${authentication.accessToken}` },
-                })
-                .then(userInfoResponse => userInfoResponse.json())
-                .then(userInfo => {
-                    console.log("Google User Info:", userInfo);
-                    
-                    // Send to your backend
-                    return axios.post(`${baseURL}users/google-login`, {
-                        email: userInfo.email,
-                        name: userInfo.name,
-                        googleId: userInfo.sub,
-                        profilePicture: userInfo.picture,
-                        idToken: authentication.idToken || authentication.accessToken
-                    });
-                })
-                .then((res) => {
-                    console.log("Backend response:", res.data);
-                    Toast.show({ 
-                        topOffset: 60, 
-                        type: "success", 
-                        text1: "Google account registered", 
-                        text2: "You are now signed in" 
+    const handleGoogleSignUp = async () => {
+        setIsSubmitting(true);
+        try {
+            const returnUrl = Linking.createURL("expo-auth-session");
+            const nonce = Math.random().toString(36).substring(2, 18);
+
+            const googleAuthUrl =
+                `https://accounts.google.com/o/oauth2/v2/auth?` +
+                `client_id=${encodeURIComponent(GOOGLE_WEB_CLIENT_ID)}` +
+                `&redirect_uri=${encodeURIComponent(EXPO_PROXY_REDIRECT)}` +
+                `&response_type=id_token` +
+                `&scope=${encodeURIComponent("openid profile email")}` +
+                `&nonce=${nonce}` +
+                `&prompt=select_account`;
+
+            const proxyStartUrl =
+                `${EXPO_PROXY_REDIRECT}/start?` +
+                `authUrl=${encodeURIComponent(googleAuthUrl)}` +
+                `&returnUrl=${encodeURIComponent(returnUrl)}`;
+
+            const result = await WebBrowser.openAuthSessionAsync(proxyStartUrl, returnUrl);
+
+            if (result.type === "success" && result.url) {
+                const params = new URLSearchParams(
+                    result.url.split("#")[1] || result.url.split("?")[1] || ""
+                );
+                const idToken = params.get("id_token");
+
+                if (idToken) {
+                  //  const decoded = jwtDecode(idToken);
+                  //  const { sub: googleId, email: googleEmail, name: googleName, picture: googlePhoto } = decoded;
+
+                    await axios.post(`${baseURL}users/google-login`, {
+    idToken,  // backend needs the raw token, not the decoded fields
+});
+
+                    Toast.show({
+                        topOffset: 60,
+                        type: "success",
+                        text1: "Google account registered",
+                        text2: "You are now signed in",
                     });
                     setTimeout(() => navigation.navigate("Login"), 500);
-                })
-                .catch((err) => {
-                    console.log("Error details:", {
-                        message: err.message,
-                        response: err.response?.data,
-                        status: err.response?.status
-                    });
-                    Toast.show({ 
-                        topOffset: 60, 
-                        type: "error", 
-                        text1: "Google sign-in failed", 
-                        text2: err?.response?.data?.message || "Please try again" 
-                    });
-                })
-                .finally(() => setIsSubmitting(false));
+                } else {
+                    const errorMsg = params.get("error") || "No ID token received";
+                    Toast.show({ topOffset: 60, type: "error", text1: "Google Sign-In Error", text2: errorMsg });
+                }
+            } else if (result.type === "cancel" || result.type === "dismiss") {
+                console.log("Google Sign-Up cancelled by user");
             }
-        } else if (response?.type === "error") {
-            console.log("Google Auth Error:", response.error);
-            Toast.show({ 
-                topOffset: 60, 
-                type: "error", 
-                text1: "Google sign-in failed", 
-                text2: response.error?.message || "Authentication failed" 
+        } catch (err) {
+            console.error("Google Sign-Up error:", err);
+            Toast.show({
+                topOffset: 60,
+                type: "error",
+                text1: "Google sign-up failed",
+                text2: err?.response?.data?.message || err.message || "Please try again",
             });
+        } finally {
+            setIsSubmitting(false);
         }
-    }, [response]);
+    };
 
     const takePhoto = async () => {
-        const c = await ImagePicker.requestCameraPermissionsAsync();
-        if (c.status === "granted") {
-            let result = await ImagePicker.launchCameraAsync({ aspect: [4, 3], quality: 1 });
-            if (!result.canceled) {
-                setMainImage(result.assets[0].uri);
-                setImage(result.assets[0].uri);
+        try {
+            const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+            if (cameraPermission.status === "granted") {
+                let result = await ImagePicker.launchCameraAsync({ 
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    allowsEditing: true,
+                    aspect: [4, 3], 
+                    quality: 1 
+                });
+                if (!result.canceled) {
+                    setMainImage(result.assets[0].uri);
+                    setImage(result.assets[0].uri);
+                }
+            } else {
+                Alert.alert("Permission Required", "Camera permission is needed to take photos");
             }
+        } catch (error) {
+            console.error("Error taking photo:", error);
+            Alert.alert("Error", "Failed to take photo");
         }
     };
 
     const pickImage = async () => {
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ["images"], allowsEditing: true, aspect: [4, 3], quality: 1,
-        });
-        if (!result.canceled) {
-            setImage(result.assets[0].uri);
-            setMainImage(result.assets[0].uri);
+        try {
+            const galleryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (galleryPermission.status === "granted") {
+                let result = await ImagePicker.launchImageLibraryAsync({ 
+                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                    allowsEditing: true,
+                    aspect: [4, 3], 
+                    quality: 1 
+                });
+                if (!result.canceled) {
+                    setMainImage(result.assets[0].uri);
+                    setImage(result.assets[0].uri);
+                }
+            } else {
+                Alert.alert("Permission Required", "Gallery permission is needed to select photos");
+            }
+        } catch (error) {
+            console.error("Error picking image:", error);
+            Alert.alert("Error", "Failed to pick image");
         }
     };
 
@@ -171,15 +184,31 @@ const Register = () => {
         formData.append("isAdmin", false);
 
         if (image) {
-            const uri = "file:///" + image.split("file:/").join("");
-            formData.append("image", { uri, type: mime.getType(uri), name: uri.split("/").pop() });
+            const filename = image.split('/').pop();
+            const match = /\.(\w+)$/.exec(filename);
+            const type = match ? `image/${match[1]}` : `image`;
+            
+            formData.append("image", {
+                uri: image,
+                name: filename,
+                type
+            });
         }
 
         axios
-            .post(`${baseURL}users/register`, formData, { headers: { "Content-Type": "multipart/form-data" } })
+            .post(`${baseURL}users/register`, formData, { 
+                headers: { 
+                    "Content-Type": "multipart/form-data" 
+                } 
+            })
             .then((res) => {
                 if (res.status === 200 || res.status === 201) {
-                    Toast.show({ topOffset: 60, type: "success", text1: "Account created!", text2: "Please login to continue" });
+                    Toast.show({ 
+                        topOffset: 60, 
+                        type: "success", 
+                        text1: "Account created!", 
+                        text2: "Please login to continue" 
+                    });
                     setTimeout(() => navigation.navigate("Login"), 500);
                 }
             })
@@ -187,9 +216,19 @@ const Register = () => {
                 const status = err?.response?.status;
                 const message = err?.response?.data?.message || "";
                 if (status === 409 || message.toLowerCase().includes("email already")) {
-                    Toast.show({ topOffset: 60, type: "error", text1: "Email already taken", text2: "Please use a different email" });
+                    Toast.show({ 
+                        topOffset: 60, 
+                        type: "error", 
+                        text1: "Email already taken", 
+                        text2: "Please use a different email" 
+                    });
                 } else {
-                    Toast.show({ topOffset: 60, type: "error", text1: "Something went wrong", text2: "Please try again" });
+                    Toast.show({ 
+                        topOffset: 60, 
+                        type: "error", 
+                        text1: "Something went wrong", 
+                        text2: "Please try again" 
+                    });
                 }
                 console.log(err);
             })
@@ -200,7 +239,6 @@ const Register = () => {
         <KeyboardAwareScrollView viewIsInsideTabBar extraHeight={200} enableOnAndroid>
             <FormContainer title="Register">
 
-                {/* Avatar picker */}
                 <View style={styles.imageContainer}>
                     {mainImage ? (
                         <Image source={{ uri: mainImage }} style={styles.image} />
@@ -212,12 +250,37 @@ const Register = () => {
                     </TouchableOpacity>
                 </View>
 
-                <Input label="Email"         placeholder="Enter your email"         autoCapitalize="none" keyboardType="email-address" onChangeText={(t) => setEmail(t.toLowerCase())} />
-                <Input label="Full Name"     placeholder="Enter your name"          onChangeText={setName} />
-                <Input label="Phone Number"  placeholder="11-digit phone number"    keyboardType="numeric" onChangeText={setPhone} />
-                <Input label="Password"      placeholder="Create a password"        secureTextEntry showToggle onChangeText={setPassword} />
+                <Input 
+                    label="Email"        
+                    placeholder="Enter your email"       
+                    autoCapitalize="none" 
+                    keyboardType="email-address" 
+                    onChangeText={(t) => setEmail(t.toLowerCase())} 
+                    value={email}
+                />
+                <Input 
+                    label="Full Name"    
+                    placeholder="Enter your name"        
+                    onChangeText={setName} 
+                    value={name}
+                />
+                <Input 
+                    label="Phone Number" 
+                    placeholder="11-digit phone number"  
+                    keyboardType="numeric" 
+                    onChangeText={setPhone} 
+                    value={phone}
+                    maxLength={11}
+                />
+                <Input 
+                    label="Password"     
+                    placeholder="Create a password"      
+                    secureTextEntry 
+                    showToggle 
+                    onChangeText={setPassword} 
+                    value={password}
+                />
 
-                {/* Error + loading */}
                 <View style={styles.buttonGroup}>
                     {error ? <Text style={styles.errorText}>{error}</Text> : null}
                     {isSubmitting && (
@@ -228,7 +291,6 @@ const Register = () => {
                     )}
                 </View>
 
-                {/* Register button */}
                 <TouchableOpacity
                     style={[styles.registerBtn, isSubmitting && styles.registerBtnDisabled]}
                     onPress={register}
@@ -239,20 +301,15 @@ const Register = () => {
                     <Text style={styles.registerBtnText}>Create Account</Text>
                 </TouchableOpacity>
 
-                {/* Divider */}
                 <View style={styles.dividerRow}>
                     <View style={styles.dividerLine} />
                     <Text style={styles.dividerText}>OR</Text>
                     <View style={styles.dividerLine} />
                 </View>
 
-                {/* Google button */}
                 <TouchableOpacity
                     style={[styles.googleBtn, isSubmitting && styles.googleBtnDisabled]}
-                    onPress={() => {
-                        console.log("Google button pressed");
-                        promptAsync();
-                    }}
+                    onPress={handleGoogleSignUp}
                     disabled={isSubmitting}
                     activeOpacity={0.85}
                 >

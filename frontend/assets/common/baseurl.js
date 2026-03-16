@@ -10,7 +10,7 @@
  * For web/same machine: use 'http://localhost:4000'
  * When backend is deployed to cloud: set BACKEND_HOST to that URL (e.g. https://your-api.railway.app)
  */
-const BACKEND_HOST = 'http://192.168.0.104:4000';
+const BACKEND_HOST = 'http://192.168.0.103:4000';
 
 //ngrok
 //const BACKEND_HOST = "https://untense-elaina-coltish.ngrok-free.dev";

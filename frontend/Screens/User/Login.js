@@ -3,14 +3,23 @@ import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import FormContainer from "../../Shared/FormContainer";
 import AuthGlobal from "../../Context/Store/AuthGlobal";
-import { loginUser } from "../../Context/Actions/Auth.actions";
+import { loginUser, setCurrentUser } from "../../Context/Actions/Auth.actions";
 import Input from "../../Shared/Input";
-import * as Google from "expo-auth-session/providers/google";
 import Toast from "react-native-toast-message";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
 import { Ionicons } from "@expo/vector-icons";
 import styles, { COLORS } from "../../Shared/User/Login.styles";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { jwtDecode } from "jwt-decode";
+import { setJwt } from "../../assets/common/jwtStore";
+
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
+const EXPO_PROXY_REDIRECT = "https://auth.expo.io/@towppy/frontend-expo";
 
 const Login = () => {
     const context = useContext(AuthGlobal);
@@ -20,37 +29,63 @@ const Login = () => {
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const [request, response, promptAsync] = Google.useAuthRequest({
-        expoClientId:   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        iosClientId:    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        androidClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-        webClientId:    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    });
-
     useEffect(() => {
         if (context.stateUser.isAuthenticated === true) {
             navigation.navigate("User Profile");
         }
     }, [context.stateUser.isAuthenticated]);
 
-    useEffect(() => {
-        if (response?.type === "success") {
-            const { id_token } = response.params;
-            if (id_token) {
-                setIsSubmitting(true);
-                axios
-                    .post(`${baseURL}users/google-login`, { idToken: id_token })
-                    .then(() => {
-                        Toast.show({ topOffset: 60, type: "success", text1: "Google login successful", text2: "You are now signed in" });
-                    })
-                    .catch((err) => {
-                        console.log(err);
-                        Toast.show({ topOffset: 60, type: "error", text1: "Google sign-in failed", text2: "Please try again" });
-                    })
-                    .finally(() => setIsSubmitting(false));
+    const handleGoogleSignIn = async () => {
+        setIsSubmitting(true);
+        try {
+            const returnUrl = Linking.createURL("expo-auth-session");
+            const nonce = Math.random().toString(36).substring(2, 18);
+
+            const googleAuthUrl =
+                `https://accounts.google.com/o/oauth2/v2/auth?` +
+                `client_id=${encodeURIComponent(GOOGLE_WEB_CLIENT_ID)}` +
+                `&redirect_uri=${encodeURIComponent(EXPO_PROXY_REDIRECT)}` +
+                `&response_type=id_token` +
+                `&scope=${encodeURIComponent("openid profile email")}` +
+                `&nonce=${nonce}` +
+                `&prompt=select_account`;
+
+            const proxyStartUrl =
+                `${EXPO_PROXY_REDIRECT}/start?` +
+                `authUrl=${encodeURIComponent(googleAuthUrl)}` +
+                `&returnUrl=${encodeURIComponent(returnUrl)}`;
+
+            const result = await WebBrowser.openAuthSessionAsync(proxyStartUrl, returnUrl);
+
+            if (result.type === "success" && result.url) {
+                const params = new URLSearchParams(
+                    result.url.split("#")[1] || result.url.split("?")[1] || ""
+                );
+                const idToken = params.get("id_token");
+
+                if (idToken) {
+                    const res = await axios.post(`${baseURL}users/google-login`, { idToken });
+                    const { token, user } = res.data;
+
+                  await setJwt(token);
+const decoded = jwtDecode(token);
+context.dispatch(setCurrentUser(decoded, user));
+
+Toast.show({ topOffset: 60, type: "success", text1: "Google login successful", text2: "You are now signed in" });
+                } else {
+                    const errorMsg = params.get("error") || "No ID token received";
+                    Toast.show({ topOffset: 60, type: "error", text1: "Google Sign-In Error", text2: errorMsg });
+                }
+            } else if (result.type === "cancel" || result.type === "dismiss") {
+                console.log("Google Sign-In cancelled");
             }
+        } catch (err) {
+            console.error("Google Sign-In error:", err);
+            Toast.show({ topOffset: 60, type: "error", text1: "Google sign-in failed", text2: err?.response?.data?.message || "Please try again" });
+        } finally {
+            setIsSubmitting(false);
         }
-    }, [response]);
+    };
 
     const handleSubmit = () => {
         if (!email || !password) {
@@ -83,14 +118,12 @@ const Login = () => {
 
             <View style={styles.buttonGroup}>
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
                 {isSubmitting && (
                     <View style={styles.loadingRow}>
                         <ActivityIndicator size="small" color={COLORS.primary} />
                         <Text style={styles.loadingText}>Signing in…</Text>
                     </View>
                 )}
-
                 <TouchableOpacity
                     style={[styles.loginBtn, isSubmitting && styles.loginBtnDisabled]}
                     onPress={handleSubmit}
@@ -111,7 +144,7 @@ const Login = () => {
             <View style={styles.buttonGroup}>
                 <TouchableOpacity
                     style={[styles.googleBtn, isSubmitting && styles.googleBtnDisabled]}
-                    onPress={() => promptAsync()}
+                    onPress={handleGoogleSignIn}
                     disabled={isSubmitting}
                     activeOpacity={0.85}
                 >

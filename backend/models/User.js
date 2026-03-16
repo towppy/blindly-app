@@ -5,8 +5,8 @@ const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    passwordHash: { type: String, required: true },
-    phone: { type: String, required: true, trim: true },
+   passwordHash: { type: String, required: false, default: '' },
+phone: { type: String, required: false, default: '', trim: true },
     image: { type: String, default: "" },
     isAdmin: { type: Boolean, default: false },
     deliveryAddress1: { type: String, default: "" },
