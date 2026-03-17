@@ -41,6 +41,7 @@ const NAV_ITEMS = [
     { label: "Categories",  icon: "pricetag-outline",   screen: "Categories"   },
     { label: "Reviews",     icon: "star-outline",       screen: "Reviews"      },
     { label: "Users",       icon: "people-outline",     screen: "Users"        },
+    { label: "Vouchers",    icon: "ticket-outline",     screen: "Vouchers / Discounts" },
 ];
 
 // ─── Dropdown Menu ────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import Analytics from "../Screens/Admin/Analytics";
 import Reviews from "../Screens/Admin/Reviews";
 import PromoNotification from "../Screens/Admin/PromoNotification";
 import AdminUsers from "../Screens/Admin/AdminUsers";
+import Vouchers from "../Screens/Admin/Vouchers";
 import AuthGlobal from "../Context/Store/AuthGlobal";
 
 const Stack = createStackNavigator();
@@ -82,6 +83,7 @@ const AdminNavigator = () => {
             <Stack.Screen name="Reviews"            component={Reviews}           options={{ title: "Reviews" }} />
             <Stack.Screen name="Promo Notification" component={PromoNotification} options={{ title: "Send Promo" }} />
             <Stack.Screen name="Users"              component={AdminUsers}        options={{ title: "Users" }} />
+            <Stack.Screen name="Vouchers / Discounts" component={Vouchers}       options={{ title: "Vouchers / Discounts" }} />
         </Stack.Navigator>
     );
 };

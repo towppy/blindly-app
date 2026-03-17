@@ -11,6 +11,7 @@ const stockAlertRoutes = require("./routes/stockAlerts");
 const reviewRoutes = require("./routes/reviews");
 const notificationRoutes = require("./routes/notifications");
 const forumRoutes = require("./routes/forum");
+const voucherRoutes = require("./routes/vouchers");
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use(`${config.apiPrefix}/reviews`, reviewRoutes);
 
 app.use(`${config.apiPrefix}/notifications`, notificationRoutes);
 app.use(`${config.apiPrefix}/forum`, forumRoutes);
+app.use(`${config.apiPrefix}/vouchers`, voucherRoutes);
 
 app.get(`${config.apiPrefix}/health`, (_req, res) => {
   res.status(200).json({ ok: true, message: "Backend config scaffold is running." });

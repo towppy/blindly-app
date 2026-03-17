@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     TextInput,
     StatusBar,
+    Alert,
 } from "react-native";
 import { Surface } from "react-native-paper";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
@@ -22,6 +23,7 @@ import AuthGlobal from "../../Context/Store/AuthGlobal";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProducts } from "../../Redux/Actions/productActions";
 import styles from "../../Shared/Product/ProductContainer.styles";
+import { getJwt } from "../../assets/common/jwtStore";
 
 const { height, width } = Dimensions.get("window");
 
@@ -44,6 +46,54 @@ const ProductContainer = () => {
     const [showPriceFilter, setShowPriceFilter] = useState(false);
     const [maxPrice, setMaxPrice] = useState(1000);
     const [activeTab, setActiveTab] = useState(0);
+    const [vouchers, setVouchers] = useState([]);
+    const [claimedVoucherIds, setClaimedVoucherIds] = useState(new Set());
+    const [claimingVoucherId, setClaimingVoucherId] = useState(null);
+
+    const loadVouchers = useCallback(async () => {
+        try {
+            const availableRes = await axios.get(`${baseURL}vouchers/available`);
+            setVouchers(availableRes.data || []);
+
+            if (context?.stateUser?.isAuthenticated) {
+                const token = await getJwt();
+                const claimedRes = await axios.get(`${baseURL}vouchers/claimed/me`, {
+                    headers: { Authorization: `Bearer ${token || ""}` },
+                });
+                const activeClaims = (claimedRes.data || [])
+                    .filter((claim) => claim.status === "claimed" && claim.voucher)
+                    .map((claim) => String(claim.voucher.id || claim.voucher._id));
+                setClaimedVoucherIds(new Set(activeClaims));
+            } else {
+                setClaimedVoucherIds(new Set());
+            }
+        } catch (_error) {
+            setVouchers([]);
+        }
+    }, [context?.stateUser?.isAuthenticated]);
+
+    const handleClaimVoucher = async (voucherId) => {
+        if (!context?.stateUser?.isAuthenticated) {
+            Alert.alert("Login required", "Please login to claim vouchers.");
+            navigation.navigate("User", { screen: "Login" });
+            return;
+        }
+
+        setClaimingVoucherId(voucherId);
+        try {
+            const token = await getJwt();
+            await axios.post(
+                `${baseURL}vouchers/${voucherId}/claim`,
+                {},
+                { headers: { Authorization: `Bearer ${token || ""}` } }
+            );
+            setClaimedVoucherIds((prev) => new Set([...prev, String(voucherId)]));
+        } catch (error) {
+            Alert.alert("Claim failed", error?.response?.data?.message || "Unable to claim voucher");
+        } finally {
+            setClaimingVoucherId(null);
+        }
+    };
 
     const searchProduct = (text) => {
         setProductsFiltered(
@@ -99,11 +149,13 @@ const ProductContainer = () => {
                 .get(`${baseURL}categories`)
                 .then((res) => setCategories(res.data))
                 .catch(() => console.log("Api categories call error"));
+            loadVouchers();
             return () => {
                 setProductsFiltered([]);
                 setCategories([]);
+                setVouchers([]);
             };
-        }, [dispatch])
+        }, [dispatch, loadVouchers])
     );
 
     return (
@@ -243,6 +295,67 @@ const ProductContainer = () => {
                             <Ionicons name="calendar-outline" size={28} color="#7c3aed" />
                         </View>
                     </View>
+
+                    {vouchers.length > 0 && (
+                        <View style={{ marginHorizontal: 14, marginBottom: 14 }}>
+                            <View style={styles.sectionHeader}>
+                                <Text style={styles.sectionTitle}>Vouchers / Discounts</Text>
+                            </View>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                {vouchers.map((voucher) => {
+                                    const voucherId = String(voucher.id || voucher._id);
+                                    const alreadyClaimed = claimedVoucherIds.has(voucherId);
+                                    const appliesText = voucher.appliesTo === "category"
+                                        ? `Category: ${voucher.category?.name || "Selected category"}`
+                                        : "All items";
+
+                                    return (
+                                        <View
+                                            key={voucherId}
+                                            style={{
+                                                width: width * 0.72,
+                                                backgroundColor: "#fff",
+                                                borderRadius: 14,
+                                                padding: 12,
+                                                marginRight: 10,
+                                                borderWidth: 1,
+                                                borderColor: "#ece7f8",
+                                            }}
+                                        >
+                                            <Text style={{ fontSize: 13, color: "#6d6297", fontWeight: "700" }}>
+                                                {voucher.name}
+                                            </Text>
+                                            <Text style={{ fontSize: 24, fontWeight: "800", color: "#e91e63", marginTop: 2 }}>
+                                                {Number(voucher.discountPercent || 0)}% OFF
+                                            </Text>
+                                            <Text style={{ color: "#6d6297", marginTop: 4 }} numberOfLines={2}>
+                                                {voucher.description || "Discount voucher"}
+                                            </Text>
+                                            <Text style={{ color: "#8677b6", marginTop: 4, fontSize: 12 }}>{appliesText}</Text>
+                                            <Text style={{ color: "#8677b6", marginTop: 2, fontSize: 12 }}>
+                                                Claim valid for {Number(voucher.dateExpirationAfterClaimDays || 0)} day(s)
+                                            </Text>
+                                            <TouchableOpacity
+                                                disabled={alreadyClaimed || claimingVoucherId === voucherId}
+                                                onPress={() => handleClaimVoucher(voucherId)}
+                                                style={{
+                                                    marginTop: 10,
+                                                    backgroundColor: alreadyClaimed ? "#9ca3af" : "#7c3aed",
+                                                    borderRadius: 10,
+                                                    paddingVertical: 9,
+                                                    alignItems: "center",
+                                                }}
+                                            >
+                                                <Text style={{ color: "#fff", fontWeight: "700" }}>
+                                                    {alreadyClaimed ? "Claimed" : claimingVoucherId === voucherId ? "Claiming..." : "Claim Voucher"}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                })}
+                            </ScrollView>
+                        </View>
+                    )}
 
                     {/* Category Filter */}
                     <CategoryFilter

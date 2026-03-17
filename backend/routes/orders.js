@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const authJwt = require("../middleware/authJwt");
 const Order = require("../models/Order");
 const User = require("../models/User");
+const Product = require("../models/Product");
+const VoucherClaim = require("../models/VoucherClaim");
 const { sendToTokens } = require("../services/notifications");
 
 const router = express.Router();
@@ -30,7 +32,7 @@ router.post("/", authJwt, async (req, res) => {
       return res.status(403).json({ message: "Admins cannot place orders" });
     }
 
-    const { orderItems } = req.body;
+    const { orderItems, voucherClaimId } = req.body;
 
     if (!orderItems || orderItems.length === 0) {
       return res.status(400).json({ message: "Order must contain at least one item" });
@@ -76,11 +78,81 @@ router.post("/", authJwt, async (req, res) => {
       };
     });
 
-    // Calculate total price server-side to prevent tampering
-    const totalPrice = mappedItems.reduce(
+    // Calculate subtotal server-side to prevent tampering
+    const subtotalPrice = mappedItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0
     );
+
+    let discountAmount = 0;
+    let voucherId = null;
+    let appliedVoucherClaimId = null;
+    let voucherName = "";
+    let voucherDiscountPercent = 0;
+
+    if (voucherClaimId) {
+      if (!mongoose.Types.ObjectId.isValid(voucherClaimId)) {
+        return res.status(400).json({ message: "Invalid voucher claim id" });
+      }
+
+      const voucherClaim = await VoucherClaim.findOne({
+        _id: voucherClaimId,
+        user: req.user.userId,
+      }).populate("voucher");
+
+      if (!voucherClaim || !voucherClaim.voucher) {
+        return res.status(404).json({ message: "Voucher claim not found" });
+      }
+
+      if (voucherClaim.status !== "claimed") {
+        return res.status(400).json({ message: "Voucher claim is not usable" });
+      }
+
+      const now = new Date();
+      if (voucherClaim.expiresAt < now) {
+        voucherClaim.status = "expired";
+        await voucherClaim.save();
+        return res.status(400).json({ message: "Voucher claim already expired" });
+      }
+
+      const voucher = voucherClaim.voucher;
+      if (!voucher.isActive || voucher.dateExpirationShop < now) {
+        return res.status(400).json({ message: "Voucher is no longer available" });
+      }
+
+      let eligibleSubtotal = subtotalPrice;
+
+      if (voucher.appliesTo === "category") {
+        const productIds = mappedItems.map((item) => item.product);
+        const productDocs = await Product.find({ _id: { $in: productIds } }, "_id category").lean();
+        const productCategoryMap = new Map(productDocs.map((p) => [String(p._id), String(p.category)]));
+        const voucherCategory = String(voucher.category || "");
+
+        eligibleSubtotal = mappedItems.reduce((sum, item) => {
+          const itemCategory = productCategoryMap.get(String(item.product));
+          if (itemCategory && itemCategory === voucherCategory) {
+            return sum + item.price * item.quantity;
+          }
+          return sum;
+        }, 0);
+
+        if (eligibleSubtotal <= 0) {
+          return res.status(400).json({ message: "Voucher category does not match cart items" });
+        }
+      }
+
+      discountAmount = Number(((eligibleSubtotal * Number(voucher.discountPercent)) / 100).toFixed(2));
+      voucherId = voucher._id;
+      appliedVoucherClaimId = voucherClaim._id;
+      voucherName = voucher.name;
+      voucherDiscountPercent = Number(voucher.discountPercent);
+
+      voucherClaim.status = "used";
+      voucherClaim.usedAt = now;
+      await voucherClaim.save();
+    }
+
+    const totalPrice = Math.max(0, Number((subtotalPrice - discountAmount).toFixed(2)));
 
     const order = await Order.create({
       orderItems: mappedItems,
@@ -91,6 +163,12 @@ router.post("/", authJwt, async (req, res) => {
       country,
       phone,
       status: STATUS.PENDING,
+      subtotalPrice,
+      discountAmount,
+      voucher: voucherId,
+      voucherClaim: appliedVoucherClaimId,
+      voucherName,
+      voucherDiscountPercent,
       totalPrice,
       user: req.user.userId,
       dateOrdered: new Date(),
