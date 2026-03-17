@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import baseURL from "../../assets/common/baseurl";
 import { getJwt } from "../../assets/common/jwtStore";
 import styles, { COLORS, STATUS_COLORS, STATUS_SOFT } from "../../Shared/Admin/Analytics.styles";
+import { useNavigation } from "@react-navigation/native";
 
 const STATUSES = ["pending", "shipped", "delivered", "cancelled"];
 
@@ -26,7 +27,7 @@ const TABS = [
     { key: "users",    label: "Users",    icon: "people-outline"        },
 ];
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+
 const StatCard = ({ icon, label, value, color, soft }) => (
     <View style={styles.statCard}>
         <View style={[styles.statIconWrap, { backgroundColor: soft }]}>
@@ -37,7 +38,7 @@ const StatCard = ({ icon, label, value, color, soft }) => (
     </View>
 );
 
-// ─── Overview Tab ─────────────────────────────────────────────────────────────
+
 const OverviewTab = ({ orders, users, countByStatus, totalRevenue, maxCount }) => (
     <>
         {/* Revenue hero */}
@@ -92,7 +93,7 @@ const OverviewTab = ({ orders, users, countByStatus, totalRevenue, maxCount }) =
     </>
 );
 
-// ─── Orders Tab ───────────────────────────────────────────────────────────────
+
 const OrdersTab = ({ orders, countByStatus }) => (
     <>
         <Text style={styles.sectionLabel}>Order Stats</Text>
@@ -135,7 +136,7 @@ const OrdersTab = ({ orders, countByStatus }) => (
     </>
 );
 
-// ─── Users Tab ────────────────────────────────────────────────────────────────
+
 const UsersTab = ({ users }) => {
     const total    = users.length;
     const active   = users.filter((u) => u.isActive !== false).length;
@@ -193,8 +194,9 @@ const UsersTab = ({ users }) => {
     );
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-const Analytics = () => {
+
+const Analytics = (props) => {
+    const navigation = useNavigation();
     const [orders,     setOrders]     = useState([]);
     const [users,      setUsers]      = useState([]);
     const [loading,    setLoading]    = useState(true);
