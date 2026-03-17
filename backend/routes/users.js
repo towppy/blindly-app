@@ -514,6 +514,144 @@ router.put("/change-password", authJwt, async (req, res) => {
   }
 });
 
+// PATCH /users/me/deactivate — authenticated user self-deactivate
+router.patch("/me/deactivate", authJwt, async (req, res) => {
+  try {
+    const reason = String(req.body?.reason || "").trim();
+    if (!reason) {
+      return res.status(400).json({ message: "Reason is required" });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      {
+        isActive: false,
+        accountStatus: "deactivated",
+        accountStatusReason: reason,
+        accountStatusUpdatedAt: new Date(),
+        pushTokens: [],
+      },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({ success: true, status: "deactivated" });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to deactivate account" });
+  }
+});
+
+// DELETE /users/me — authenticated user account deletion request
+router.delete("/me", authJwt, async (req, res) => {
+  try {
+    const reason = String(req.body?.reason || "").trim();
+    if (!reason) {
+      return res.status(400).json({ message: "Reason is required" });
+    }
+
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Best-effort Firebase account cleanup if linked
+    if (user.firebaseUid) {
+      try {
+        await firebaseAdmin.auth().deleteUser(user.firebaseUid);
+      } catch (_e) {
+        // Ignore Firebase errors here so account action can proceed
+      }
+    }
+
+    const suffix = `${Date.now()}-${String(user._id).slice(-6)}`;
+    user.name = `Deleted User ${suffix}`;
+    user.email = `deleted-${suffix}@blindly.local`;
+    user.phone = "";
+    user.image = "";
+    user.passwordHash = await bcrypt.hash(`${suffix}-deleted`, 10);
+    user.deliveryAddress1 = "";
+    user.deliveryAddress2 = "";
+    user.deliveryCity = "";
+    user.deliveryZip = "";
+    user.deliveryCountry = "";
+    user.deliveryLocation = { latitude: null, longitude: null };
+    user.pushTokens = [];
+    user.isActive = false;
+    user.accountStatus = "deleted";
+    user.accountStatusReason = reason;
+    user.accountStatusUpdatedAt = new Date();
+    user.firebaseUid = null;
+    await user.save();
+
+    return res.status(200).json({ success: true, status: "deleted" });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to delete account" });
+  }
+});
+
+// GET /users/admin/push-readiness — admin only, token count diagnostics per user
+router.get("/admin/push-readiness", authJwt, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    const users = await User.find()
+      .select("name email isAdmin isActive pushTokens createdAt updatedAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    let pushReadyCount = 0;
+    let totalTokens = 0;
+
+    const diagnostics = users.map((u) => {
+      const entries = Array.isArray(u.pushTokens) ? u.pushTokens : [];
+      const uniqueTokens = new Set(entries.map((t) => String(t?.token || "")).filter(Boolean));
+      const tokenCount = uniqueTokens.size;
+      const expoCount = entries.filter((t) => t?.type === "expo").length;
+      const fcmCount = entries.filter((t) => t?.type === "fcm").length;
+      const unknownCount = entries.filter((t) => !t?.type || t?.type === "unknown").length;
+
+      if (tokenCount > 0) {
+        pushReadyCount += 1;
+      }
+      totalTokens += tokenCount;
+
+      return {
+        id: String(u._id),
+        name: u.name || "",
+        email: u.email || "",
+        isAdmin: u.isAdmin === true,
+        isActive: u.isActive !== false,
+        pushReady: tokenCount > 0,
+        tokenCount,
+        byType: {
+          expo: expoCount,
+          fcm: fcmCount,
+          unknown: unknownCount,
+        },
+        createdAt: u.createdAt,
+        updatedAt: u.updatedAt,
+      };
+    });
+
+    return res.status(200).json({
+      summary: {
+        totalUsers: diagnostics.length,
+        pushReadyUsers: pushReadyCount,
+        usersWithoutTokens: diagnostics.length - pushReadyCount,
+        totalTokens,
+      },
+      users: diagnostics,
+    });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to load push readiness diagnostics" });
+  }
+});
+
 // GET /users/:id — must be LAST to avoid catching static routes like /profile-photo
 router.get("/:id", authJwt, async (req, res) => {
   try {

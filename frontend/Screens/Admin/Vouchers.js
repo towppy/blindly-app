@@ -11,13 +11,16 @@ import {
     Switch,
     Alert,
     ActivityIndicator,
+    Image,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
+import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "@react-navigation/native";
 import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
 import { getJwt } from "../../assets/common/jwtStore";
 import baseURL from "../../assets/common/baseurl";
+import mime from "mime";
 
 const EMPTY_FORM = {
     name: "",
@@ -31,6 +34,15 @@ const EMPTY_FORM = {
     isActive: true,
 };
 
+const MONTHS = [
+    "01", "02", "03", "04", "05", "06",
+    "07", "08", "09", "10", "11", "12",
+];
+
+function daysInMonth(year, month) {
+    return new Date(Number(year), Number(month), 0).getDate();
+}
+
 const Vouchers = () => {
     const [vouchers, setVouchers] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -39,6 +51,10 @@ const Vouchers = () => {
     const [modalVisible, setModalVisible] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState(EMPTY_FORM);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [pickerYear, setPickerYear] = useState(String(new Date().getFullYear()));
+    const [pickerMonth, setPickerMonth] = useState(String(new Date().getMonth() + 1).padStart(2, "0"));
+    const [pickerDay, setPickerDay] = useState(String(new Date().getDate()).padStart(2, "0"));
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -71,6 +87,10 @@ const Vouchers = () => {
 
     const openCreate = () => {
         resetForm();
+        const now = new Date();
+        setPickerYear(String(now.getFullYear()));
+        setPickerMonth(String(now.getMonth() + 1).padStart(2, "0"));
+        setPickerDay(String(now.getDate()).padStart(2, "0"));
         setModalVisible(true);
     };
 
@@ -88,12 +108,44 @@ const Vouchers = () => {
             category: item.category?.id || item.category?._id || "",
             isActive: item.isActive !== false,
         });
+        const dateBase = item.dateExpirationShop ? new Date(item.dateExpirationShop) : new Date();
+        setPickerYear(String(dateBase.getFullYear()));
+        setPickerMonth(String(dateBase.getMonth() + 1).padStart(2, "0"));
+        setPickerDay(String(dateBase.getDate()).padStart(2, "0"));
         setModalVisible(true);
+    };
+
+    const confirmPickedDate = () => {
+        const maxDays = daysInMonth(pickerYear, pickerMonth);
+        const normalizedDay = Math.min(Number(pickerDay), maxDays);
+        const day = String(normalizedDay).padStart(2, "0");
+        setPickerDay(day);
+        setForm((s) => ({ ...s, dateExpirationShop: `${pickerYear}-${pickerMonth}-${day}` }));
+        setShowDatePicker(false);
     };
 
     const closeModal = () => {
         setModalVisible(false);
         resetForm();
+    };
+
+    const openImagePicker = async () => {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (permission.status !== "granted") {
+            Alert.alert("Permission required", "Gallery permission is needed to upload an image.");
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 1,
+        });
+
+        if (!result.canceled && result.assets?.[0]?.uri) {
+            setForm((s) => ({ ...s, image: result.assets[0].uri }));
+        }
     };
 
     const saveVoucher = async () => {
@@ -113,18 +165,35 @@ const Vouchers = () => {
         setSaving(true);
         try {
             const token = await getJwt();
-            const config = { headers: { Authorization: `Bearer ${token || ""}` } };
-            const payload = {
-                name: form.name.trim(),
-                description: form.description,
-                image: form.image,
-                dateExpirationShop: form.dateExpirationShop,
-                dateExpirationAfterClaimDays: Number(form.dateExpirationAfterClaimDays),
-                discountPercent: Number(form.discountPercent),
-                appliesTo: form.appliesTo,
-                category: form.appliesTo === "category" ? form.category : null,
-                isActive: form.isActive,
+            const config = {
+                headers: {
+                    Authorization: `Bearer ${token || ""}`,
+                    "Content-Type": "multipart/form-data",
+                },
             };
+
+            const payload = new FormData();
+            payload.append("name", form.name.trim());
+            payload.append("description", form.description || "");
+            payload.append("dateExpirationShop", form.dateExpirationShop);
+            payload.append("dateExpirationAfterClaimDays", String(Number(form.dateExpirationAfterClaimDays)));
+            payload.append("discountPercent", String(Number(form.discountPercent)));
+            payload.append("appliesTo", form.appliesTo);
+            payload.append("isActive", form.isActive ? "true" : "false");
+
+            if (form.appliesTo === "category") {
+                payload.append("category", form.category);
+            }
+
+            if (form.image && (form.image.startsWith("file://") || form.image.startsWith("content://"))) {
+                payload.append("image", {
+                    uri: form.image,
+                    type: mime.getType(form.image) || "image/jpeg",
+                    name: form.image.split("/").pop() || "voucher.jpg",
+                });
+            } else {
+                payload.append("existingImage", form.image || "");
+            }
 
             if (editingId) {
                 const res = await axios.put(`${baseURL}vouchers/${editingId}`, payload, config);
@@ -164,6 +233,26 @@ const Vouchers = () => {
         ]);
     };
 
+    const notifyUsers = async (id) => {
+        try {
+            const token = await getJwt();
+            const res = await axios.post(
+                `${baseURL}vouchers/${id}/notify`,
+                {},
+                { headers: { Authorization: `Bearer ${token || ""}` } }
+            );
+            if (res?.data?.voucher) {
+                const updatedVoucher = res.data.voucher;
+                setVouchers((prev) =>
+                    prev.map((v) => ((v.id || v._id) === (updatedVoucher.id || updatedVoucher._id) ? updatedVoucher : v))
+                );
+            }
+            Alert.alert("Notify Users", res?.data?.message || "Users have been notified.");
+        } catch (error) {
+            Alert.alert("Error", error?.response?.data?.message || "Failed to notify users");
+        }
+    };
+
     const renderVoucher = ({ item }) => {
         const id = item.id || item._id;
         const scopeText = item.appliesTo === "category"
@@ -184,11 +273,18 @@ const Vouchers = () => {
                 <Text style={styles.meta}>
                     Claim valid: {Number(item.dateExpirationAfterClaimDays || 0)} day(s)
                 </Text>
+                <Text style={styles.meta}>
+                    Last notified: {item.lastNotifiedAt ? new Date(item.lastNotifiedAt).toLocaleString() : "Never"}
+                </Text>
 
                 <View style={styles.actions}>
                     <TouchableOpacity style={styles.actionBtn} onPress={() => openEdit(item)}>
                         <Ionicons name="create-outline" size={16} color="#fff" />
                         <Text style={styles.actionText}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionBtn, styles.notifyBtn]} onPress={() => notifyUsers(id)}>
+                        <Ionicons name="notifications-outline" size={16} color="#fff" />
+                        <Text style={styles.actionText}>Notify Users</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={() => deleteVoucher(id)}>
                         <Ionicons name="trash-outline" size={16} color="#fff" />
@@ -238,16 +334,31 @@ const Vouchers = () => {
                         onChangeText={(v) => setForm((s) => ({ ...s, description: v }))}
                     />
 
-                    <Text style={styles.label}>Image URL</Text>
-                    <TextInput style={styles.input} value={form.image} onChangeText={(v) => setForm((s) => ({ ...s, image: v }))} />
+                    <Text style={styles.label}>Voucher Image</Text>
+                    <View style={styles.imageRow}>
+                        <View style={styles.imagePreviewWrap}>
+                            {form.image ? (
+                                <Image source={{ uri: form.image }} style={styles.imagePreview} />
+                            ) : (
+                                <Ionicons name="image-outline" size={24} color="#9b8ec4" />
+                            )}
+                        </View>
+                        <TouchableOpacity style={styles.uploadBtn} onPress={openImagePicker}>
+                            <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
+                            <Text style={styles.uploadBtnText}>Upload Image</Text>
+                        </TouchableOpacity>
+                    </View>
 
-                    <Text style={styles.label}>Shop Expiration Date (YYYY-MM-DD)</Text>
-                    <TextInput
-                        style={styles.input}
-                        value={form.dateExpirationShop}
-                        onChangeText={(v) => setForm((s) => ({ ...s, dateExpirationShop: v }))}
-                        placeholder="2026-12-31"
-                    />
+                    <Text style={styles.label}>Shop Expiration Date</Text>
+                    <TouchableOpacity
+                        style={styles.dateBtn}
+                        onPress={() => setShowDatePicker(true)}
+                    >
+                        <Ionicons name="calendar-outline" size={16} color="#3d2c8d" />
+                        <Text style={styles.dateBtnText}>
+                            {form.dateExpirationShop || "Select date"}
+                        </Text>
+                    </TouchableOpacity>
 
                     <Text style={styles.label}>Expiration After Claim (days)</Text>
                     <TextInput
@@ -311,6 +422,64 @@ const Vouchers = () => {
                     </View>
                 </ScrollView>
             </Modal>
+
+            <Modal
+                visible={showDatePicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowDatePicker(false)}
+            >
+                <View style={styles.overlay}>
+                    <View style={styles.dateModalCard}>
+                        <Text style={styles.dateModalTitle}>Select Shop Expiration Date</Text>
+                        <View style={styles.datePickersRow}>
+                            <View style={styles.datePickerBox}>
+                                <Text style={styles.datePickerLabel}>Year</Text>
+                                <Picker
+                                    selectedValue={pickerYear}
+                                    onValueChange={(value) => setPickerYear(value)}
+                                >
+                                    {Array.from({ length: 8 }).map((_, idx) => {
+                                        const year = String(new Date().getFullYear() + idx);
+                                        return <Picker.Item key={year} label={year} value={year} />;
+                                    })}
+                                </Picker>
+                            </View>
+                            <View style={styles.datePickerBox}>
+                                <Text style={styles.datePickerLabel}>Month</Text>
+                                <Picker
+                                    selectedValue={pickerMonth}
+                                    onValueChange={(value) => setPickerMonth(value)}
+                                >
+                                    {MONTHS.map((m) => (
+                                        <Picker.Item key={m} label={m} value={m} />
+                                    ))}
+                                </Picker>
+                            </View>
+                            <View style={styles.datePickerBox}>
+                                <Text style={styles.datePickerLabel}>Day</Text>
+                                <Picker
+                                    selectedValue={pickerDay}
+                                    onValueChange={(value) => setPickerDay(value)}
+                                >
+                                    {Array.from({ length: daysInMonth(pickerYear, pickerMonth) }).map((_, idx) => {
+                                        const d = String(idx + 1).padStart(2, "0");
+                                        return <Picker.Item key={d} label={d} value={d} />;
+                                    })}
+                                </Picker>
+                            </View>
+                        </View>
+                        <View style={styles.dateModalActions}>
+                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowDatePicker(false)}>
+                                <Text style={styles.cancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.saveBtn} onPress={confirmPickedDate}>
+                                <Text style={styles.saveText}>Set Date</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -353,6 +522,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
     },
     deleteBtn: { backgroundColor: "#ef4444" },
+    notifyBtn: { backgroundColor: "#2563eb" },
     actionText: { color: "#fff", fontWeight: "700" },
     center: { flex: 1, justifyContent: "center", alignItems: "center" },
     empty: { textAlign: "center", marginTop: 24, color: "#8e84b6" },
@@ -366,6 +536,54 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         paddingHorizontal: 10,
         paddingVertical: 10,
+    },
+    imageRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+    },
+    imagePreviewWrap: {
+        width: 72,
+        height: 72,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: "#ddd3f3",
+        backgroundColor: "#fff",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+    },
+    imagePreview: {
+        width: "100%",
+        height: "100%",
+    },
+    uploadBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        backgroundColor: "#7c3aed",
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 8,
+    },
+    uploadBtnText: {
+        color: "#fff",
+        fontWeight: "700",
+    },
+    dateBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        backgroundColor: "#fff",
+        borderWidth: 1,
+        borderColor: "#e6e0f5",
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 12,
+    },
+    dateBtnText: {
+        color: "#3d2c8d",
+        fontWeight: "600",
     },
     textArea: { minHeight: 80, textAlignVertical: "top" },
     pickerWrap: { backgroundColor: "#fff", borderRadius: 8, borderWidth: 1, borderColor: "#e6e0f5" },
@@ -388,6 +606,42 @@ const styles = StyleSheet.create({
     },
     cancelText: { color: "#3d2c8d", fontWeight: "700" },
     saveText: { color: "#fff", fontWeight: "700" },
+    overlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.35)",
+        justifyContent: "center",
+        paddingHorizontal: 16,
+    },
+    dateModalCard: {
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        padding: 14,
+    },
+    dateModalTitle: {
+        fontSize: 16,
+        fontWeight: "800",
+        color: "#1a1235",
+        marginBottom: 8,
+    },
+    datePickersRow: {
+        flexDirection: "row",
+        gap: 8,
+    },
+    datePickerBox: {
+        flex: 1,
+    },
+    datePickerLabel: {
+        color: "#6d6297",
+        fontSize: 12,
+        marginBottom: 2,
+        fontWeight: "700",
+    },
+    dateModalActions: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        gap: 10,
+        marginTop: 8,
+    },
 });
 
 export default Vouchers;

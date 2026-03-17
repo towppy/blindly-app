@@ -42,6 +42,7 @@ const NAV_ITEMS = [
     { label: "Reviews",     icon: "star-outline",       screen: "Reviews"      },
     { label: "Users",       icon: "people-outline",     screen: "Users"        },
     { label: "Vouchers",    icon: "ticket-outline",     screen: "Vouchers / Discounts" },
+    { label: "Push Tokens", icon: "notifications-outline", screen: "Push Diagnostics" },
 ];
 
 // ─── Dropdown Menu ────────────────────────────────────────────────────────────

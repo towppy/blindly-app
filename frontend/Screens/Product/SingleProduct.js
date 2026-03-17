@@ -2,19 +2,31 @@ import React, { useState, useCallback, useContext, useRef } from "react";
 import {
     Image, View, StyleSheet, Text, ScrollView,
     TouchableOpacity, TextInput, ActivityIndicator, Alert,
-    FlatList, Dimensions
+    FlatList, Dimensions, Modal
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchReviews as fetchReviewsAction } from "../../Redux/Actions/reviewActions";
+import { addToCart, updateCartItemQuantity } from "../../Redux/Actions/cartActions";
 import { getJwt } from "../../assets/common/jwtStore";
 import axios from "axios";
+import * as ImagePicker from "expo-image-picker";
+import mime from "mime";
 import Toast from "react-native-toast-message";
 import AuthGlobal from "../../Context/Store/AuthGlobal";
 import baseURL from "../../assets/common/baseurl";
+import { Picker } from "@react-native-picker/picker";
 
 const FALLBACK_IMAGE = "https://cdn.pixabay.com/photo/2012/04/01/17/29/box-23649_960_720.png";
+const ADMIN_DELETE_REASONS = [
+    "Inappropriate language",
+    "Hate speech or harassment",
+    "Spam or irrelevant content",
+    "Misleading information",
+    "Policy violation",
+    "Other",
+];
 
 const StarRow = ({ rating, onSelect, size = 16 }) => (
     <View style={{ flexDirection: "row" }}>
@@ -37,24 +49,31 @@ const StarRow = ({ rating, onSelect, size = 16 }) => (
 
 const SingleProduct = ({ route }) => {
     const [item] = useState(route.params?.item || {});
+    const navigation = useNavigation();
     const context = useContext(AuthGlobal);
     const isAuthenticated = context?.stateUser?.isAuthenticated;
     const isAdmin = context?.stateUser?.user?.isAdmin === true;
+    const [quantity, setQuantity] = useState(1);
 
     const dispatch = useDispatch();
     const { items: reviews, loading: reviewsLoading } = useSelector((state) => state.reviews);
+    const cartItems = useSelector((state) => state.cartItems);
     const [canReview, setCanReview] = useState(false);
     const [myReview, setMyReview] = useState(null);
 
     // New review form state
     const [rating, setRating] = useState(5);
     const [comment, setComment] = useState("");
+    const [reviewImages, setReviewImages] = useState([]);
     const [submitting, setSubmitting] = useState(false);
 
     // Edit review state
     const [editMode, setEditMode] = useState(false);
     const [editRating, setEditRating] = useState(5);
     const [editComment, setEditComment] = useState("");
+    const [editImages, setEditImages] = useState([]);
+    const [adminDeleteModal, setAdminDeleteModal] = useState({ visible: false, reviewId: null });
+    const [adminDeleteReason, setAdminDeleteReason] = useState(ADMIN_DELETE_REASONS[0]);
 
     const productId = item.id || item._id;
 
@@ -75,8 +94,10 @@ const SingleProduct = ({ route }) => {
                 setMyReview(r);
                 setEditRating(r.rating);
                 setEditComment(r.comment || "");
+                setEditImages(Array.isArray(r.images) ? r.images : []);
             } else {
                 setMyReview(null);
+                setEditImages([]);
             }
         } catch (e) {
             console.log("[SingleProduct] can-review error:", e.message);
@@ -94,14 +115,31 @@ const SingleProduct = ({ route }) => {
         setSubmitting(true);
         try {
             const token = await getJwt();
+            const formData = new FormData();
+            formData.append("productId", productId);
+            formData.append("rating", String(rating));
+            formData.append("comment", comment || "");
+            reviewImages.forEach((uri, idx) => {
+                formData.append("images", {
+                    uri,
+                    type: mime.getType(uri) || "image/jpeg",
+                    name: uri.split("/").pop() || `review-${idx}.jpg`,
+                });
+            });
             await axios.post(
                 `${baseURL}reviews`,
-                { productId, rating, comment },
-                { headers: { Authorization: `Bearer ${token || ""}` } }
+                formData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token || ""}`,
+                        "Content-Type": "multipart/form-data",
+                    },
+                }
             );
             Toast.show({ type: "success", text1: "Review submitted!" });
             setComment("");
             setRating(5);
+            setReviewImages([]);
             await fetchReviews();
             await checkCanReview();
         } catch (e) {
@@ -115,10 +153,29 @@ const SingleProduct = ({ route }) => {
         setSubmitting(true);
         try {
             const token = await getJwt();
+            const formData = new FormData();
+            formData.append("rating", String(editRating));
+            formData.append("comment", editComment || "");
+            const existingRemote = editImages.filter((uri) => String(uri).startsWith("http"));
+            existingRemote.forEach((url) => formData.append("existingImages", url));
+            editImages
+                .filter((uri) => String(uri).startsWith("file://") || String(uri).startsWith("content://"))
+                .forEach((uri, idx) => {
+                    formData.append("images", {
+                        uri,
+                        type: mime.getType(uri) || "image/jpeg",
+                        name: uri.split("/").pop() || `review-edit-${idx}.jpg`,
+                    });
+                });
             await axios.put(
                 `${baseURL}reviews/${myReview.id || myReview._id}`,
-                { rating: editRating, comment: editComment },
-                { headers: { Authorization: `Bearer ${token || ""}` } }
+                formData,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token || ""}`,
+                        "Content-Type": "multipart/form-data",
+                    },
+                }
             );
             Toast.show({ type: "success", text1: "Review updated!" });
             setEditMode(false);
@@ -132,6 +189,12 @@ const SingleProduct = ({ route }) => {
     };
 
     const deleteReview = (reviewId, isOwn = false) => {
+        if (isAdmin && !isOwn) {
+            setAdminDeleteReason(ADMIN_DELETE_REASONS[0]);
+            setAdminDeleteModal({ visible: true, reviewId });
+            return;
+        }
+
         Alert.alert(
             "Delete Review",
             isOwn ? "Delete your review?" : "Delete this review?",
@@ -160,6 +223,43 @@ const SingleProduct = ({ route }) => {
         );
     };
 
+    const confirmAdminDelete = async () => {
+        try {
+            const token = await getJwt();
+            await axios.delete(`${baseURL}reviews/${adminDeleteModal.reviewId}`, {
+                headers: { Authorization: `Bearer ${token || ""}` },
+                data: { reason: adminDeleteReason },
+            });
+            setAdminDeleteModal({ visible: false, reviewId: null });
+            fetchReviews();
+        } catch (_e) {
+            Toast.show({ type: "error", text1: "Failed to delete review" });
+        }
+    };
+
+    const pickImages = async (mode = "new") => {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (permission.status !== "granted") {
+            Toast.show({ type: "error", text1: "Gallery permission is required" });
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsMultipleSelection: true,
+            quality: 1,
+        });
+
+        if (!result.canceled) {
+            const uris = (result.assets || []).map((a) => a.uri).filter(Boolean);
+            if (mode === "edit") {
+                setEditImages((prev) => [...prev, ...uris].slice(0, 5));
+            } else {
+                setReviewImages((prev) => [...prev, ...uris].slice(0, 5));
+            }
+        }
+    };
+
     // Derived values
     const categoryName =
         item.category && typeof item.category === "object"
@@ -180,6 +280,57 @@ const SingleProduct = ({ route }) => {
             : null;
 
     const myReviewId = myReview ? (myReview.id || myReview._id) : null;
+
+    const increaseQty = () => {
+        if (quantity < Math.max(1, stockCount)) {
+            setQuantity((prev) => prev + 1);
+        }
+    };
+
+    const decreaseQty = () => {
+        if (quantity > 1) {
+            setQuantity((prev) => prev - 1);
+        }
+    };
+
+    const handleAddToCart = () => {
+        if (!isAuthenticated) {
+            Toast.show({ type: "error", text1: "Please login first" });
+            navigation.navigate("User", { screen: "Login" });
+            return false;
+        }
+        if (isAdmin) {
+            Toast.show({ type: "error", text1: "Admin accounts cannot place orders" });
+            return false;
+        }
+        if (stockCount <= 0) {
+            Toast.show({ type: "error", text1: "Product is out of stock" });
+            return false;
+        }
+
+        const productRef = String(item.id || item._id || "");
+        const existing = (cartItems || []).find(
+            (cartItem) => String(cartItem.id || cartItem._id || "") === productRef
+        );
+
+        if (existing) {
+            const existingQty = Number(existing.quantity || 1);
+            const mergedQty = Math.min(existingQty + Number(quantity || 1), Math.max(1, stockCount));
+            dispatch(updateCartItemQuantity(existing, mergedQty, context?.stateUser?.user?.email));
+            Toast.show({ type: "success", text1: "Cart quantity updated" });
+        } else {
+            dispatch(addToCart({ ...item, quantity }, context?.stateUser?.user?.email));
+            Toast.show({ type: "success", text1: "Added to cart" });
+        }
+
+        return true;
+    };
+
+    const handleOrderNow = () => {
+        const added = handleAddToCart();
+        if (!added) return;
+        navigation.navigate("Cart Screen", { screen: "Checkout" });
+    };
 
     // Carousel logic
     // Ensure imagesArr is always an array of strings
@@ -266,6 +417,45 @@ const SingleProduct = ({ route }) => {
 
                 <Text style={styles.price}>${Number(item.price || 0).toFixed(2)}</Text>
 
+                <View style={styles.purchaseBox}>
+                    <View style={styles.quantityRow}>
+                        <Text style={styles.quantityLabel}>Quantity</Text>
+                        <View style={styles.quantityControls}>
+                            <TouchableOpacity style={styles.qtyBtn} onPress={decreaseQty}>
+                                <Ionicons name="remove" size={16} color="#7c3aed" />
+                            </TouchableOpacity>
+                            <Text style={styles.qtyValue}>{quantity}</Text>
+                            <TouchableOpacity
+                                style={[styles.qtyBtn, quantity >= Math.max(1, stockCount) && styles.qtyBtnDisabled]}
+                                onPress={increaseQty}
+                                disabled={quantity >= Math.max(1, stockCount)}
+                            >
+                                <Ionicons name="add" size={16} color="#7c3aed" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    <View style={styles.actionButtonsRow}>
+                        <TouchableOpacity
+                            style={[styles.cartBtn, stockCount <= 0 && styles.disabledAction]}
+                            onPress={handleAddToCart}
+                            disabled={stockCount <= 0}
+                        >
+                            <Ionicons name="cart-outline" size={16} color="#7c3aed" />
+                            <Text style={styles.cartBtnText}>Add to Cart</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.orderBtn, stockCount <= 0 && styles.disabledAction]}
+                            onPress={handleOrderNow}
+                            disabled={stockCount <= 0}
+                        >
+                            <Ionicons name="flash-outline" size={16} color="#fff" />
+                            <Text style={styles.orderBtnText}>Order Now</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
                 {item.description ? (
                     <View style={styles.descriptionBox}>
                         <Text style={styles.sectionLabel}>Description</Text>
@@ -300,6 +490,25 @@ const SingleProduct = ({ route }) => {
                             multiline
                             numberOfLines={3}
                         />
+                        <TouchableOpacity style={styles.pickImageBtn} onPress={() => pickImages("new")}> 
+                            <Ionicons name="images-outline" size={16} color="#7c3aed" />
+                            <Text style={styles.pickImageBtnText}>Upload review images</Text>
+                        </TouchableOpacity>
+                        {reviewImages.length > 0 ? (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                                {reviewImages.map((uri, idx) => (
+                                    <View key={`${uri}-${idx}`} style={styles.previewWrap}>
+                                        <Image source={{ uri }} style={styles.previewImage} />
+                                        <TouchableOpacity
+                                            style={styles.previewRemove}
+                                            onPress={() => setReviewImages((prev) => prev.filter((_, i) => i !== idx))}
+                                        >
+                                            <Ionicons name="close" size={14} color="#fff" />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        ) : null}
                         <TouchableOpacity
                             style={styles.submitBtn}
                             onPress={submitReview}
@@ -346,6 +555,25 @@ const SingleProduct = ({ route }) => {
                                     placeholder="Update your comment"
                                     placeholderTextColor="#aaa"
                                 />
+                                <TouchableOpacity style={styles.pickImageBtn} onPress={() => pickImages("edit")}>
+                                    <Ionicons name="images-outline" size={16} color="#7c3aed" />
+                                    <Text style={styles.pickImageBtnText}>Manage review images</Text>
+                                </TouchableOpacity>
+                                {editImages.length > 0 ? (
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                                        {editImages.map((uri, idx) => (
+                                            <View key={`${uri}-${idx}`} style={styles.previewWrap}>
+                                                <Image source={{ uri }} style={styles.previewImage} />
+                                                <TouchableOpacity
+                                                    style={styles.previewRemove}
+                                                    onPress={() => setEditImages((prev) => prev.filter((_, i) => i !== idx))}
+                                                >
+                                                    <Ionicons name="close" size={14} color="#fff" />
+                                                </TouchableOpacity>
+                                            </View>
+                                        ))}
+                                    </ScrollView>
+                                ) : null}
                                 <TouchableOpacity
                                     style={styles.submitBtn}
                                     onPress={submitEdit}
@@ -363,6 +591,13 @@ const SingleProduct = ({ route }) => {
                                 <StarRow rating={myReview.rating} />
                                 {myReview.comment ? (
                                     <Text style={styles.reviewComment}>{myReview.comment}</Text>
+                                ) : null}
+                                {Array.isArray(myReview.images) && myReview.images.length > 0 ? (
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                                        {myReview.images.map((uri, idx) => (
+                                            <Image key={`${uri}-${idx}`} source={{ uri }} style={styles.reviewImage} />
+                                        ))}
+                                    </ScrollView>
                                 ) : null}
                             </>
                         )}
@@ -405,11 +640,47 @@ const SingleProduct = ({ route }) => {
                                 {r.comment ? (
                                     <Text style={styles.reviewComment}>{r.comment}</Text>
                                 ) : null}
+                                {Array.isArray(r.images) && r.images.length > 0 ? (
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                                        {r.images.map((uri, idx) => (
+                                            <Image key={`${uri}-${idx}`} source={{ uri }} style={styles.reviewImage} />
+                                        ))}
+                                    </ScrollView>
+                                ) : null}
                             </View>
                         ))
                 )}
             </View>
             <View style={{ height: 40 }} />
+
+            <Modal
+                visible={adminDeleteModal.visible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setAdminDeleteModal({ visible: false, reviewId: null })}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>Delete Review</Text>
+                        <Text style={styles.modalText}>Select reason for deletion:</Text>
+                        <View style={styles.reasonPickerWrap}>
+                            <Picker selectedValue={adminDeleteReason} onValueChange={setAdminDeleteReason}>
+                                {ADMIN_DELETE_REASONS.map((reason) => (
+                                    <Picker.Item key={reason} label={reason} value={reason} />
+                                ))}
+                            </Picker>
+                        </View>
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setAdminDeleteModal({ visible: false, reviewId: null })}>
+                                <Text style={styles.cancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.confirmBtn} onPress={confirmAdminDelete}>
+                                <Text style={styles.confirmText}>Delete</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </ScrollView>
     );
 };
@@ -429,6 +700,48 @@ const styles = StyleSheet.create({
     badge:           { backgroundColor: "#ede8fa", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
     badgeText:       { color: "#7c3aed", fontSize: 12, fontWeight: "600" },
     price:           { fontSize: 24, fontWeight: "800", color: "#e91e63", marginTop: 10, marginBottom: 4 },
+    purchaseBox:     { marginTop: 12, marginBottom: 6 },
+    quantityRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    quantityLabel:   { fontSize: 14, fontWeight: "700", color: "#3d2c8d" },
+    quantityControls:{ flexDirection: "row", alignItems: "center", gap: 10 },
+    qtyBtn:          {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        borderWidth: 1,
+        borderColor: "#d8cef0",
+        backgroundColor: "#fff",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    qtyBtnDisabled:  { opacity: 0.4 },
+    qtyValue:        { minWidth: 20, textAlign: "center", fontSize: 15, fontWeight: "700", color: "#1a0a3c" },
+    actionButtonsRow:{ flexDirection: "row", marginTop: 12, gap: 10 },
+    cartBtn:         {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        borderWidth: 1,
+        borderColor: "#7c3aed",
+        borderRadius: 10,
+        paddingVertical: 10,
+        backgroundColor: "#f5f1ff",
+    },
+    cartBtnText:     { color: "#7c3aed", fontWeight: "700" },
+    orderBtn:        {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        borderRadius: 10,
+        paddingVertical: 10,
+        backgroundColor: "#7c3aed",
+    },
+    orderBtnText:    { color: "#fff", fontWeight: "700" },
+    disabledAction:  { opacity: 0.45 },
     descriptionBox:  { marginTop: 14 },
     sectionLabel:    { fontSize: 12, fontWeight: "600", color: "#aaa", textTransform: "uppercase", marginBottom: 4 },
     description:     { fontSize: 14, color: "#444", lineHeight: 21 },
@@ -447,6 +760,26 @@ const styles = StyleSheet.create({
         fontSize: 14, color: "#333", minHeight: 70, textAlignVertical: "top",
         backgroundColor: "#fff",
     },
+    pickImageBtn:    {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 10,
+    },
+    pickImageBtnText:{ color: "#7c3aed", fontWeight: "600", fontSize: 13 },
+    previewWrap:     { marginRight: 8, position: "relative" },
+    previewImage:    { width: 58, height: 58, borderRadius: 8, backgroundColor: "#eee" },
+    previewRemove:   {
+        position: "absolute",
+        top: -4,
+        right: -4,
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: "#e11d48",
+        alignItems: "center",
+        justifyContent: "center",
+    },
     submitBtn:       { backgroundColor: "#7c3aed", borderRadius: 8, padding: 12, alignItems: "center" },
     submitBtnText:   { color: "#fff", fontWeight: "700", fontSize: 14 },
 
@@ -456,9 +789,37 @@ const styles = StyleSheet.create({
     reviewUserName:  { fontSize: 14, fontWeight: "700", color: "#1a0a3c" },
     reviewDate:      { fontSize: 11, color: "#aaa" },
     reviewComment:   { fontSize: 13, color: "#444", marginTop: 6, lineHeight: 19 },
+    reviewImage:     { width: 72, height: 72, borderRadius: 8, marginRight: 8, backgroundColor: "#eee" },
     actionRow:       { flexDirection: "row", alignItems: "center", gap: 8 },
     iconBtn:         { padding: 2 },
     noReviews:       { color: "#aaa", fontSize: 14, textAlign: "center", marginTop: 16 },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.35)",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+    },
+    modalCard: {
+        width: "100%",
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        padding: 14,
+    },
+    modalTitle: { fontSize: 16, fontWeight: "700", color: "#1a0a3c" },
+    modalText: { marginTop: 8, color: "#555" },
+    reasonPickerWrap: {
+        borderWidth: 1,
+        borderColor: "#e8e8e8",
+        borderRadius: 10,
+        marginTop: 10,
+        overflow: "hidden",
+    },
+    modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 12 },
+    cancelBtn: { paddingHorizontal: 12, paddingVertical: 8 },
+    confirmBtn: { backgroundColor: "#e11d48", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+    cancelText: { color: "#555", fontWeight: "600" },
+    confirmText: { color: "#fff", fontWeight: "700" },
 });
 
 export default SingleProduct;

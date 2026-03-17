@@ -12,6 +12,7 @@ const voucherSchema = new mongoose.Schema(
     appliesTo: { type: String, enum: ["all", "category"], default: "all" },
     category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", default: null },
     isActive: { type: Boolean, default: true },
+    lastNotifiedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

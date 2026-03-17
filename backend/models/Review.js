@@ -6,6 +6,10 @@ const reviewSchema = new mongoose.Schema(
     user:    { type: mongoose.Schema.Types.ObjectId, ref: "User",    required: true },
     rating:  { type: Number, required: true, min: 1, max: 5 },
     comment: { type: String, default: "" },
+    images: [{ type: String }],
+    deletionReason: { type: String, default: "" },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     isActive: { type: Boolean, default: true },
   },
   {

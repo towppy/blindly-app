@@ -1,8 +1,11 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const authJwt = require("../middleware/authJwt");
+const upload = require("../helpers/upload");
 const Voucher = require("../models/Voucher");
 const VoucherClaim = require("../models/VoucherClaim");
+const User = require("../models/User");
+const { sendToTokens } = require("../services/notifications");
 
 const router = express.Router();
 
@@ -25,6 +28,41 @@ async function markExpiredClaims(userId) {
     },
     { status: "expired" }
   );
+}
+
+async function notifyUsersVoucherPublished(voucher) {
+  const users = await User.find({}, "pushTokens pushToken pushTokenType").lean();
+  const tokenSet = new Set();
+  const tokens = [];
+
+  for (const u of users) {
+    for (const t of u.pushTokens || []) {
+      if (t?.token && !tokenSet.has(t.token)) {
+        tokenSet.add(t.token);
+        tokens.push({ token: t.token, type: t.type });
+      }
+    }
+
+    if (u.pushToken && !tokenSet.has(u.pushToken)) {
+      tokenSet.add(u.pushToken);
+      tokens.push({ token: u.pushToken, type: u.pushTokenType || "fcm" });
+    }
+  }
+
+  if (tokens.length === 0) return { targeted: 0 };
+
+  await sendToTokens(tokens, {
+    title: `New voucher: ${voucher.name}`,
+    body: `${Number(voucher.discountPercent || 0)}% off is now available. Claim it on home page!`,
+    data: {
+      type: "promo",
+      title: voucher.name,
+      body: voucher.description || "New voucher is now available.",
+      details: `Discount: ${Number(voucher.discountPercent || 0)}%`,
+    },
+  });
+
+  return { targeted: tokens.length };
 }
 
 router.get("/available", async (_req, res) => {
@@ -135,7 +173,7 @@ router.get("/admin", authJwt, async (req, res) => {
   }
 });
 
-router.post("/", authJwt, async (req, res) => {
+router.post("/", authJwt, upload.single("image"), async (req, res) => {
   try {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
@@ -177,10 +215,12 @@ router.post("/", authJwt, async (req, res) => {
       return res.status(400).json({ message: "Valid category is required when appliesTo is category" });
     }
 
+    const voucherImage = req.file?.path || image || "";
+
     const voucher = await Voucher.create({
       name: String(name).trim(),
       description: description || "",
-      image: image || "",
+      image: voucherImage,
       dateExpirationShop: expiresAtShop,
       dateExpirationAfterClaimDays: claimDays,
       discountPercent: discount,
@@ -190,6 +230,7 @@ router.post("/", authJwt, async (req, res) => {
     });
 
     const populated = await voucher.populate("category", "id name");
+    await notifyUsersVoucherPublished(populated);
     return res.status(201).json(populated);
   } catch (error) {
     if (error?.code === 11000) {
@@ -199,7 +240,7 @@ router.post("/", authJwt, async (req, res) => {
   }
 });
 
-router.put("/:id", authJwt, async (req, res) => {
+router.put("/:id", authJwt, upload.single("image"), async (req, res) => {
   try {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
@@ -218,7 +259,14 @@ router.put("/:id", authJwt, async (req, res) => {
 
     if (req.body.name !== undefined) updates.name = String(req.body.name).trim();
     if (req.body.description !== undefined) updates.description = req.body.description;
-    if (req.body.image !== undefined) updates.image = req.body.image;
+
+    if (req.file?.path) {
+      updates.image = req.file.path;
+    } else if (req.body.existingImage !== undefined) {
+      updates.image = req.body.existingImage;
+    } else if (req.body.image !== undefined) {
+      updates.image = req.body.image;
+    }
 
     if (req.body.dateExpirationShop !== undefined) {
       const shopDate = parseDate(req.body.dateExpirationShop);
@@ -274,12 +322,47 @@ router.put("/:id", authJwt, async (req, res) => {
       "id name"
     );
 
+    if (updated?.isActive) {
+      await notifyUsersVoucherPublished(updated);
+    }
+
     return res.status(200).json(updated);
   } catch (error) {
     if (error?.code === 11000) {
       return res.status(409).json({ message: "Voucher name already exists" });
     }
     return res.status(500).json({ message: "Failed to update voucher" });
+  }
+});
+
+router.post("/:id/notify", authJwt, async (req, res) => {
+  try {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: "Invalid voucher id" });
+    }
+
+    const voucher = await Voucher.findById(req.params.id).populate("category", "id name");
+    if (!voucher) {
+      return res.status(404).json({ message: "Voucher not found" });
+    }
+
+    const result = await notifyUsersVoucherPublished(voucher);
+    voucher.lastNotifiedAt = new Date();
+    await voucher.save();
+    const populated = await Voucher.findById(voucher._id).populate("category", "id name");
+
+    return res.status(200).json({
+      success: true,
+      message: result?.targeted ? `Users notified (${result.targeted})` : "No registered push tokens found",
+      targeted: result?.targeted || 0,
+      voucher: populated,
+    });
+  } catch (_error) {
+    return res.status(500).json({ message: "Failed to notify users" });
   }
 });
 

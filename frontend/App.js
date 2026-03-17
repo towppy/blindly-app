@@ -93,6 +93,7 @@ function AppInner() {
           date: new Date().toISOString(),
           orderId: notification.request.content.data?.orderId || null,
           type: notification.request.content.data?.type || null,
+          reviewReason: notification.request.content.data?.reason || null,
           promoTitle: notification.request.content.data?.title || null,
           promoBody: notification.request.content.data?.body || null,
           promoDetails: notification.request.content.data?.details || null,

@@ -13,6 +13,7 @@ import Reviews from "../Screens/Admin/Reviews";
 import PromoNotification from "../Screens/Admin/PromoNotification";
 import AdminUsers from "../Screens/Admin/AdminUsers";
 import Vouchers from "../Screens/Admin/Vouchers";
+import PushDiagnostics from "../Screens/Admin/PushDiagnostics";
 import AuthGlobal from "../Context/Store/AuthGlobal";
 
 const Stack = createStackNavigator();
@@ -84,6 +85,7 @@ const AdminNavigator = () => {
             <Stack.Screen name="Promo Notification" component={PromoNotification} options={{ title: "Send Promo" }} />
             <Stack.Screen name="Users"              component={AdminUsers}        options={{ title: "Users" }} />
             <Stack.Screen name="Vouchers / Discounts" component={Vouchers}       options={{ title: "Vouchers / Discounts" }} />
+            <Stack.Screen name="Push Diagnostics" component={PushDiagnostics}     options={{ title: "Push Diagnostics" }} />
         </Stack.Navigator>
     );
 };

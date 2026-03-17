@@ -12,6 +12,8 @@ const config = {
   uploadDir: process.env.UPLOAD_DIR || "uploads",
   maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 5),
   fcmServiceAccountPath: process.env.FCM_SERVICE_ACCOUNT_PATH || "",
+  openAiApiKey: process.env.OPENAI_API_KEY || "",
+  openAiModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
 };
 
 const missing = requiredKeys.filter((key) => !process.env[key]);

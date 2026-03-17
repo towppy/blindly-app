@@ -47,6 +47,28 @@ async function sendFCM(tokens, title, body, data) {
   try {
     const result = await admin.messaging().sendEachForMulticast(message);
     console.log(`[notifications] FCM sent: ${result.successCount} success, ${result.failureCount} failed`);
+
+    if (Array.isArray(result.responses) && result.responses.length > 0) {
+      const staleTokens = [];
+      result.responses.forEach((entry, idx) => {
+        const code = entry?.error?.code || "";
+        if (
+          code === "messaging/registration-token-not-registered" ||
+          code === "messaging/invalid-registration-token"
+        ) {
+          staleTokens.push(tokens[idx]);
+        }
+      });
+
+      if (staleTokens.length > 0) {
+        const User = require("../models/User");
+        await User.updateMany(
+          { "pushTokens.token": { $in: staleTokens } },
+          { $pull: { pushTokens: { token: { $in: staleTokens } } } }
+        );
+        console.log(`[notifications] Removed ${staleTokens.length} stale FCM token(s)`);
+      }
+    }
   } catch (error) {
     console.warn("[notifications] FCM send error:", error.message);
   }

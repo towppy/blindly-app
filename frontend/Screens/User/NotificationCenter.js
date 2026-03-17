@@ -29,6 +29,7 @@ const NotificationCenter = () => {
                 date: n.date ? new Date(n.date) : new Date(),
                 orderId: n.request.content.data?.orderId || null,
                 type: n.request.content.data?.type || null,
+                reviewReason: n.request.content.data?.reason || null,
                 promoTitle: n.request.content.data?.title || null,
                 promoBody: n.request.content.data?.body || null,
                 promoDetails: n.request.content.data?.details || null,
@@ -77,15 +78,33 @@ const NotificationCenter = () => {
                         body: item.promoBody || item.body,
                         details: item.promoDetails || "",
                     });
+                } else if (item.type === "login") {
+                    navigation.navigate("User Profile");
                 }
             }}
             activeOpacity={item.orderId || item.type === "promo" ? 0.7 : 1}
         >
             <View style={styles.iconContainer}>
                 <Ionicons
-                    name={item.type === "promo" ? "pricetag" : "notifications"}
+                    name={
+                        item.type === "promo"
+                            ? "pricetag"
+                            : item.type === "review"
+                                ? "shield-checkmark-outline"
+                            : item.type === "login"
+                                ? "log-in-outline"
+                                : "notifications"
+                    }
                     size={24}
-                    color={item.type === "promo" ? "#7c3aed" : "#e91e63"}
+                    color={
+                        item.type === "promo"
+                            ? "#7c3aed"
+                            : item.type === "review"
+                                ? "#f97316"
+                            : item.type === "login"
+                                ? "#3b82f6"
+                                : "#e91e63"
+                    }
                 />
             </View>
             <View style={styles.textContainer}>
@@ -94,10 +113,17 @@ const NotificationCenter = () => {
                 <Text style={styles.date}>
                     {item.date.toLocaleDateString()} {item.date.toLocaleTimeString()}
                 </Text>
+                {item.type === "review" && item.reviewReason ? (
+                    <Text style={[styles.tapHint, { color: "#f97316" }]}>Reason: {item.reviewReason}</Text>
+                ) : null}
                 {item.orderId ? (
                     <Text style={styles.tapHint}>Tap to view order details</Text>
                 ) : item.type === "promo" ? (
                     <Text style={[styles.tapHint, { color: "#7c3aed" }]}>Tap to view promo details</Text>
+                ) : item.type === "review" ? (
+                    <Text style={[styles.tapHint, { color: "#f97316" }]}>Review moderation update</Text>
+                ) : item.type === "login" ? (
+                    <Text style={[styles.tapHint, { color: "#3b82f6" }]}>Tap to view your profile</Text>
                 ) : null}
             </View>
         </TouchableOpacity>

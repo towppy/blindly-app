@@ -159,15 +159,69 @@ const styles = StyleSheet.create({
         height: "100%",
     },
     itemName: {
-        flex: 1,
         fontSize: 14,
         fontWeight: "600",
         color: COLORS.textDark,
         lineHeight: 19,
     },
+    itemInfoWrap: {
+        flex: 1,
+        marginRight: 8,
+    },
+    itemMeta: {
+        marginTop: 2,
+        fontSize: 12,
+        fontWeight: "600",
+        color: COLORS.textSubtle,
+    },
     itemPrice: {
         fontSize: 15,
         fontWeight: "800",
+        color: COLORS.primary,
+    },
+
+    totalsCard: {
+        width: "100%",
+        backgroundColor: COLORS.card,
+        borderRadius: 18,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        marginBottom: 14,
+        shadowColor: COLORS.primaryDeep,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.09,
+        shadowRadius: 12,
+        elevation: 4,
+    },
+    totalRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 4,
+    },
+    totalLabel: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: COLORS.textMuted,
+    },
+    totalValue: {
+        fontSize: 14,
+        fontWeight: "700",
+        color: COLORS.textDark,
+    },
+    discountValue: {
+        fontSize: 14,
+        fontWeight: "700",
+        color: COLORS.danger,
+    },
+    grandTotalLabel: {
+        fontSize: 16,
+        fontWeight: "800",
+        color: COLORS.textDark,
+    },
+    grandTotalValue: {
+        fontSize: 18,
+        fontWeight: "900",
         color: COLORS.primary,
     },
 

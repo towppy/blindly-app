@@ -4,6 +4,7 @@ import ProductContainer from "../Screens/Product/ProductContainer";
 import SingleProduct from "../Screens/Product/SingleProduct";
 import PromoNotification from "../Screens/Admin/PromoNotification";
 import PromoDetail from "../Screens/User/PromoDetail";
+import HelpChat from "../Screens/User/HelpChat";
 
 const Stack = createStackNavigator();
 
@@ -29,6 +30,11 @@ function MyStack() {
                 name="Promo Detail"
                 component={PromoDetail}
                 options={{ title: "Promo Details" }}
+            />
+            <Stack.Screen
+                name="Help Chat"
+                component={HelpChat}
+                options={{ title: "Help Chat" }}
             />
         </Stack.Navigator>
     );

@@ -1,14 +1,29 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const multer = require("multer");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("../config/cloudinary");
 const authJwt = require("../middleware/authJwt");
 const Review = require("../models/Review");
 const Order = require("../models/Order");
+const User = require("../models/User");
+const { sendToTokens } = require("../services/notifications");
 
 // bad words filter
 const Filter = require("bad-words");
 const filter = new Filter();
 
 const router = express.Router();
+
+const reviewStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "review_images",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+  },
+});
+
+const reviewUpload = multer({ storage: reviewStorage });
 
 // GET /reviews — admin only
 router.get("/", authJwt, async (req, res) => {
@@ -85,7 +100,7 @@ router.get("/can-review/:productId", authJwt, async (req, res) => {
 });
 
 // POST review
-router.post("/", authJwt, async (req, res) => {
+router.post("/", authJwt, reviewUpload.array("images", 5), async (req, res) => {
   try {
     if (req.user?.isAdmin) {
       return res.status(403).json({ message: "Admins cannot post reviews" });
@@ -120,6 +135,7 @@ router.post("/", authJwt, async (req, res) => {
     }
 
     const cleanComment = filter.clean(String(comment || "").trim());
+    const uploadedImages = (req.files || []).map((f) => f.path);
 
     const softDeleted = await Review.findOne({
       product: productId,
@@ -131,6 +147,7 @@ router.post("/", authJwt, async (req, res) => {
       softDeleted.isActive = true;
       softDeleted.rating = parsedRating;
       softDeleted.comment = cleanComment;
+      softDeleted.images = uploadedImages;
 
       await softDeleted.save();
       return res.status(201).json(softDeleted);
@@ -141,6 +158,7 @@ router.post("/", authJwt, async (req, res) => {
       user: req.user.userId,
       rating: parsedRating,
       comment: cleanComment,
+      images: uploadedImages,
     });
 
     res.status(201).json(review);
@@ -156,7 +174,7 @@ router.post("/", authJwt, async (req, res) => {
 });
 
 // UPDATE review
-router.put("/:id", authJwt, async (req, res) => {
+router.put("/:id", authJwt, reviewUpload.array("images", 5), async (req, res) => {
   try {
     if (req.user?.isAdmin) {
       return res.status(403).json({ message: "Admins cannot edit reviews" });
@@ -194,6 +212,18 @@ router.put("/:id", authJwt, async (req, res) => {
       review.comment = filter.clean(String(comment).trim());
     }
 
+    if (req.files && req.files.length > 0) {
+      const existingImages = req.body.existingImages
+        ? (Array.isArray(req.body.existingImages) ? req.body.existingImages : [req.body.existingImages])
+        : [];
+      const newImages = req.files.map((f) => f.path);
+      review.images = [...existingImages, ...newImages];
+    } else if (req.body.existingImages !== undefined) {
+      review.images = Array.isArray(req.body.existingImages)
+        ? req.body.existingImages
+        : (req.body.existingImages ? [req.body.existingImages] : []);
+    }
+
     await review.save();
 
     res.status(200).json(review);
@@ -212,6 +242,7 @@ router.delete("/:id", authJwt, async (req, res) => {
     }
 
     const isOwner = review.user.toString() === req.user.userId;
+    const reason = String(req.body?.reason || "").trim();
 
     if (!req.user?.isAdmin && !isOwner) {
       return res.status(403).json({
@@ -219,7 +250,38 @@ router.delete("/:id", authJwt, async (req, res) => {
       });
     }
 
-    await Review.findByIdAndUpdate(req.params.id, { isActive: false });
+    if (req.user?.isAdmin && !reason) {
+      return res.status(400).json({ message: "Deletion reason is required" });
+    }
+
+    await Review.findByIdAndUpdate(req.params.id, {
+      isActive: false,
+      deletionReason: req.user?.isAdmin ? reason : "",
+      deletedAt: req.user?.isAdmin ? new Date() : null,
+      deletedBy: req.user?.isAdmin ? req.user.userId : null,
+    });
+
+    if (req.user?.isAdmin) {
+      const recipient = await User.findById(review.user, "pushTokens pushToken pushTokenType").lean();
+      const tokens = [];
+      if (recipient?.pushTokens?.length) {
+        tokens.push(...recipient.pushTokens.map((t) => ({ token: t.token, type: t.type })));
+      }
+      if (recipient?.pushToken) {
+        tokens.push({ token: recipient.pushToken, type: recipient.pushTokenType || "fcm" });
+      }
+
+      if (tokens.length > 0) {
+        await sendToTokens(tokens, {
+          title: "Review removed by admin",
+          body: `Your review was removed. Reason: ${reason}`,
+          data: {
+            type: "review",
+            reason,
+          },
+        });
+      }
+    }
 
     res.status(200).json({ success: true });
   } catch {

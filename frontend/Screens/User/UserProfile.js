@@ -1,6 +1,7 @@
 import React, { useContext, useState, useCallback } from "react";
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Image } from "react-native";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Image, Modal } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { Picker } from "@react-native-picker/picker";
 import { getJwt } from "../../assets/common/jwtStore";
 import axios from "axios";
 import baseURL from "../../assets/common/baseurl";
@@ -12,6 +13,15 @@ import AddressMapPicker from "../../Shared/AddressMapPicker";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import styles, { COLORS } from "../../Shared/User/UserProfile.styles";
+
+const ACCOUNT_ACTION_REASONS = [
+    "Privacy concerns",
+    "I am not using this account anymore",
+    "Too many notifications",
+    "I have another account",
+    "I found a better app",
+    "Other",
+];
 
 const UserProfile = () => {
     const context = useContext(AuthGlobal);
@@ -34,6 +44,11 @@ const UserProfile = () => {
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [accountActionReason, setAccountActionReason] = useState(ACCOUNT_ACTION_REASONS[0]);
+    const [isAccountActionLoading, setIsAccountActionLoading] = useState(false);
+    const [showAccountActionModal, setShowAccountActionModal] = useState(false);
+    const [showReasonModal, setShowReasonModal] = useState(false);
+    const [pendingAccountAction, setPendingAccountAction] = useState("");
 
     const requiredProfileFields = {
         phone:            String(phone || "").trim(),
@@ -207,6 +222,55 @@ const UserProfile = () => {
         }
     };
 
+    const performAccountAction = async (type) => {
+        try {
+            setIsAccountActionLoading(true);
+            const jwt = await getJwt();
+            if (!jwt) {
+                Toast.show({ topOffset: 60, type: "error", text1: "Session expired", text2: "Please login again" });
+                return;
+            }
+
+            if (type === "deactivate") {
+                await axios.patch(
+                    `${baseURL}users/me/deactivate`,
+                    { reason: accountActionReason },
+                    { headers: { Authorization: `Bearer ${jwt}` } }
+                );
+                Toast.show({ topOffset: 60, type: "success", text1: "Account deactivated" });
+            } else {
+                await axios.delete(`${baseURL}users/me`, {
+                    headers: { Authorization: `Bearer ${jwt}` },
+                    data: { reason: accountActionReason },
+                });
+                Toast.show({ topOffset: 60, type: "success", text1: "Account deleted" });
+            }
+
+            logoutUser(context.dispatch);
+        } catch (error) {
+            Toast.show({
+                topOffset: 60,
+                type: "error",
+                text1: error?.response?.data?.message || "Account action failed",
+            });
+        } finally {
+            setIsAccountActionLoading(false);
+        }
+    };
+
+    const openReasonModalForAction = (type) => {
+        setPendingAccountAction(type);
+        setAccountActionReason(ACCOUNT_ACTION_REASONS[0]);
+        setShowAccountActionModal(false);
+        setShowReasonModal(true);
+    };
+
+    const confirmAccountActionWithReason = () => {
+        if (!pendingAccountAction) return;
+        setShowReasonModal(false);
+        performAccountAction(pendingAccountAction);
+    };
+
     return (
         <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.subContainer}>
@@ -313,6 +377,16 @@ const UserProfile = () => {
                     </View>
                 )}
 
+                <TouchableOpacity
+                    style={[styles.accountActionTriggerBtn, isAccountActionLoading && styles.accountActionBtnDisabled]}
+                    onPress={() => setShowAccountActionModal(true)}
+                    disabled={isAccountActionLoading}
+                    activeOpacity={0.8}
+                >
+                    <Ionicons name="settings-outline" size={18} color={COLORS.white} style={{ marginRight: 8 }} />
+                    <Text style={styles.accountActionTriggerText}>Account Actions</Text>
+                </TouchableOpacity>
+
                 {/* ── Sign out ── */}
                 <TouchableOpacity
                     style={styles.logoutBtn}
@@ -331,6 +405,92 @@ const UserProfile = () => {
                 onClose={() => setMapVisible(false)}
                 onPicked={onMapPicked}
             />
+
+            <Modal
+                visible={showAccountActionModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowAccountActionModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>Account Actions</Text>
+                        <Text style={styles.modalSubtitle}>Choose what you want to do with your account.</Text>
+
+                        <TouchableOpacity
+                            style={styles.modalDeactivateBtn}
+                            onPress={() => openReasonModalForAction("deactivate")}
+                            activeOpacity={0.85}
+                        >
+                            <Ionicons name="pause-circle-outline" size={18} color={COLORS.white} style={{ marginRight: 8 }} />
+                            <Text style={styles.modalDeactivateText}>Deactivate Account</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.modalDeleteBtn}
+                            onPress={() => openReasonModalForAction("delete")}
+                            activeOpacity={0.85}
+                        >
+                            <Ionicons name="trash-outline" size={18} color={COLORS.white} style={{ marginRight: 8 }} />
+                            <Text style={styles.modalDeleteText}>Delete Account</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.modalCancelBtn}
+                            onPress={() => setShowAccountActionModal(false)}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={styles.modalCancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={showReasonModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowReasonModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>Select Reason</Text>
+                        <Text style={styles.modalSubtitle}>
+                            {pendingAccountAction === "delete"
+                                ? "Choose a reason before deleting your account."
+                                : "Choose a reason before deactivating your account."}
+                        </Text>
+
+                        <View style={styles.accountReasonPickerWrap}>
+                            <Picker selectedValue={accountActionReason} onValueChange={setAccountActionReason}>
+                                {ACCOUNT_ACTION_REASONS.map((reason) => (
+                                    <Picker.Item key={reason} label={reason} value={reason} />
+                                ))}
+                            </Picker>
+                        </View>
+
+                        <View style={styles.modalActionsRow}>
+                            <TouchableOpacity
+                                style={styles.modalCancelBtnSmall}
+                                onPress={() => setShowReasonModal(false)}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={styles.modalCancelText}>Back</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={pendingAccountAction === "delete" ? styles.modalDeleteBtnSmall : styles.modalDeactivateBtnSmall}
+                                onPress={confirmAccountActionWithReason}
+                                activeOpacity={0.85}
+                                disabled={isAccountActionLoading}
+                            >
+                                <Text style={styles.modalActionConfirmText}>
+                                    {pendingAccountAction === "delete" ? "Delete" : "Deactivate"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };

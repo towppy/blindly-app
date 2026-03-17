@@ -32,6 +32,13 @@ const Confirm = (props) => {
     const dispatch = useDispatch();
     const navigation = useNavigation();
 
+    const computedSubtotal = (order?.orderItems || []).reduce((sum, item) => {
+        return sum + Number(item?.price || 0) * Number(item?.quantity || 1);
+    }, 0);
+    const subtotal = Number(order?.subtotal ?? computedSubtotal);
+    const discount = Number(order?.discountAmount || 0);
+    const grandTotal = Number(order?.totalAmount ?? Math.max(0, subtotal - discount));
+
     const confirmOrder = () => {
         getJwt()
             .then((res) => {
@@ -98,12 +105,37 @@ const Confirm = (props) => {
                                 <View style={styles.itemImageWrap}>
                                     <Image source={{ uri: item.image || FALLBACK_IMAGE }} style={styles.itemImage} resizeMode="cover" />
                                 </View>
-                                <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                                <Text style={styles.itemPrice}>₱{Number(item.price).toFixed(2)}</Text>
+                                <View style={styles.itemInfoWrap}>
+                                    <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                                    <Text style={styles.itemMeta}>
+                                        ₱{Number(item.price || 0).toFixed(2)} x {Number(item.quantity || 1)}
+                                    </Text>
+                                </View>
+                                <Text style={styles.itemPrice}>
+                                    ₱{(Number(item.price || 0) * Number(item.quantity || 1)).toFixed(2)}
+                                </Text>
                             </View>
                             {idx < order.orderItems.length - 1 && <View style={styles.divider} />}
                         </React.Fragment>
                     ))}
+                </View>
+
+                <View style={styles.totalsCard}>
+                    <View style={styles.totalRow}>
+                        <Text style={styles.totalLabel}>Subtotal</Text>
+                        <Text style={styles.totalValue}>₱{subtotal.toFixed(2)}</Text>
+                    </View>
+                    {discount > 0 ? (
+                        <View style={styles.totalRow}>
+                            <Text style={styles.totalLabel}>Discount</Text>
+                            <Text style={styles.discountValue}>-₱{discount.toFixed(2)}</Text>
+                        </View>
+                    ) : null}
+                    <View style={[styles.divider, { marginVertical: 8 }]} />
+                    <View style={styles.totalRow}>
+                        <Text style={styles.grandTotalLabel}>Grand Total</Text>
+                        <Text style={styles.grandTotalValue}>₱{grandTotal.toFixed(2)}</Text>
+                    </View>
                 </View>
 
                 <TouchableOpacity style={styles.placeOrderBtn} onPress={confirmOrder} activeOpacity={0.85}>

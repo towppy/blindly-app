@@ -31,7 +31,6 @@ const TAB_ITEMS = ["New", "Popular", "Limited"];
 
 const ProductContainer = () => {
     const context = useContext(AuthGlobal);
-    const isAdmin = context?.stateUser?.user?.isAdmin === true;
     const navigation = useNavigation();
     const dispatch = useDispatch();
     const { items: products } = useSelector((state) => state.products);
@@ -49,6 +48,11 @@ const ProductContainer = () => {
     const [vouchers, setVouchers] = useState([]);
     const [claimedVoucherIds, setClaimedVoucherIds] = useState(new Set());
     const [claimingVoucherId, setClaimingVoucherId] = useState(null);
+
+    const welcomeName =
+        context?.stateUser?.userProfile?.name ||
+        context?.stateUser?.user?.name ||
+        "Shopper";
 
     const loadVouchers = useCallback(async () => {
         try {
@@ -164,7 +168,12 @@ const ProductContainer = () => {
 
             {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.welcomeText}>Welcome!</Text>
+                <View>
+                    <Text style={styles.welcomeText}>Get surprised with Blindly! Shop now!</Text>
+                    <Text style={{ color: "#9b8ec4", fontSize: 12, fontWeight: "600", marginTop: 2 }}>
+                        {`Welcome, ${welcomeName}`}
+                    </Text>
+                </View>
                 <TouchableOpacity
                     style={styles.avatarBtn}
                     onPress={() => navigation.navigate("User Profile")}
@@ -261,17 +270,6 @@ const ProductContainer = () => {
                 </View>
             )}
 
-            {/* Admin Promo Button */}
-            {isAdmin && !focus && (
-                <TouchableOpacity
-                    style={styles.promoBtn}
-                    onPress={() => navigation.navigate("Promo Notification")}
-                >
-                    <Ionicons name="megaphone-outline" size={16} color="#fff" style={{ marginRight: 7 }} />
-                    <Text style={styles.promoBtnText}>Add Promo / Discounts</Text>
-                </TouchableOpacity>
-            )}
-
             {/* Content */}
             {focus ? (
                 <SearchedProduct productsFiltered={productsFiltered} />
@@ -286,22 +284,32 @@ const ProductContainer = () => {
                     </View>
 
                     {/* Help Banner */}
-                    <View style={styles.helpBanner}>
+                    <TouchableOpacity
+                        style={styles.helpBanner}
+                        activeOpacity={0.85}
+                        onPress={() => navigation.navigate("Help Chat")}
+                    >
                         <View style={{ flex: 1 }}>
                             <Text style={styles.helpTitle}>Need help?</Text>
                             <Text style={styles.helpSub}>Track orders or chat with us.</Text>
                         </View>
                         <View style={styles.helpIcon}>
-                            <Ionicons name="calendar-outline" size={28} color="#7c3aed" />
+                            <Ionicons name="chatbubbles-outline" size={28} color="#7c3aed" />
                         </View>
-                    </View>
+                    </TouchableOpacity>
 
                     {vouchers.length > 0 && (
                         <View style={{ marginHorizontal: 14, marginBottom: 14 }}>
                             <View style={styles.sectionHeader}>
                                 <Text style={styles.sectionTitle}>Vouchers / Discounts</Text>
                             </View>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <ScrollView
+                                horizontal
+                                pagingEnabled
+                                showsHorizontalScrollIndicator={false}
+                                decelerationRate="fast"
+                                snapToInterval={width * 0.58 + 10}
+                            >
                                 {vouchers.map((voucher) => {
                                     const voucherId = String(voucher.id || voucher._id);
                                     const alreadyClaimed = claimedVoucherIds.has(voucherId);
@@ -313,40 +321,43 @@ const ProductContainer = () => {
                                         <View
                                             key={voucherId}
                                             style={{
-                                                width: width * 0.72,
+                                                width: width * 0.58,
                                                 backgroundColor: "#fff",
                                                 borderRadius: 14,
-                                                padding: 12,
+                                                padding: 10,
                                                 marginRight: 10,
                                                 borderWidth: 1,
                                                 borderColor: "#ece7f8",
                                             }}
                                         >
-                                            <Text style={{ fontSize: 13, color: "#6d6297", fontWeight: "700" }}>
+                                            <Text style={{ fontSize: 12, color: "#6d6297", fontWeight: "700" }} numberOfLines={1}>
                                                 {voucher.name}
                                             </Text>
-                                            <Text style={{ fontSize: 24, fontWeight: "800", color: "#e91e63", marginTop: 2 }}>
+                                            <Text style={{ fontSize: 20, fontWeight: "800", color: "#e91e63", marginTop: 2 }}>
                                                 {Number(voucher.discountPercent || 0)}% OFF
                                             </Text>
-                                            <Text style={{ color: "#6d6297", marginTop: 4 }} numberOfLines={2}>
+                                            <Text style={{ color: "#6d6297", marginTop: 4, fontSize: 12 }} numberOfLines={2}>
                                                 {voucher.description || "Discount voucher"}
                                             </Text>
-                                            <Text style={{ color: "#8677b6", marginTop: 4, fontSize: 12 }}>{appliesText}</Text>
-                                            <Text style={{ color: "#8677b6", marginTop: 2, fontSize: 12 }}>
+                                            <Text style={{ color: "#8677b6", marginTop: 4, fontSize: 11 }} numberOfLines={1}>{appliesText}</Text>
+                                            <Text style={{ color: "#8677b6", marginTop: 2, fontSize: 11 }}>
                                                 Claim valid for {Number(voucher.dateExpirationAfterClaimDays || 0)} day(s)
+                                            </Text>
+                                            <Text style={{ color: "#8677b6", marginTop: 2, fontSize: 11 }}>
+                                                Ends on: {voucher.dateExpirationShop ? new Date(voucher.dateExpirationShop).toLocaleDateString() : "-"}
                                             </Text>
                                             <TouchableOpacity
                                                 disabled={alreadyClaimed || claimingVoucherId === voucherId}
                                                 onPress={() => handleClaimVoucher(voucherId)}
                                                 style={{
-                                                    marginTop: 10,
+                                                    marginTop: 8,
                                                     backgroundColor: alreadyClaimed ? "#9ca3af" : "#7c3aed",
                                                     borderRadius: 10,
-                                                    paddingVertical: 9,
+                                                    paddingVertical: 8,
                                                     alignItems: "center",
                                                 }}
                                             >
-                                                <Text style={{ color: "#fff", fontWeight: "700" }}>
+                                                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
                                                     {alreadyClaimed ? "Claimed" : claimingVoucherId === voucherId ? "Claiming..." : "Claim Voucher"}
                                                 </Text>
                                             </TouchableOpacity>

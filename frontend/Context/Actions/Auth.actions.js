@@ -5,6 +5,15 @@ import baseURL from "../../assets/common/baseurl";
 import { setJwt, getJwt, deleteJwt } from "../../assets/common/jwtStore";
 import { clearCart, loadCartFromDB } from "../../Redux/Actions/cartActions";
 
+async function addLocalNotificationHistory(item) {
+    try {
+        const existing = await AsyncStorage.getItem("notificationHistory");
+        const arr = existing ? JSON.parse(existing) : [];
+        const updated = [item, ...arr.filter((n) => n.id !== item.id)].slice(0, 100);
+        await AsyncStorage.setItem("notificationHistory", JSON.stringify(updated));
+    } catch (_e) {}
+}
+
 export const SET_CURRENT_USER = "SET_CURRENT_USER";
 
 export const loginUser = (user, dispatch, reduxDispatch) => {
@@ -30,18 +39,31 @@ export const loginUser = (user, dispatch, reduxDispatch) => {
                     // Don't call logoutUser — no session exists yet
                 });
             }
-            return res.json().then((data) => {
+            return res.json().then(async (data) => {
                 if (data && data.token) {
                     const token = data.token;
                     return setJwt(token).then(() => {
                         const decoded = jwtDecode(token);
                         dispatch(setCurrentUser(decoded, user));
+                        addLocalNotificationHistory({
+                            id: `login-${Date.now()}-${decoded.userId || "user"}`,
+                            title: "Login successful",
+                            body: `Welcome back, ${decoded.email || "user"}!`,
+                            date: new Date().toISOString(),
+                            type: "login",
+                        });
                         // Load cart for this user
                         if (reduxDispatch && decoded && decoded.email) {
                             reduxDispatch(loadCartFromDB(decoded.email));
                         }
                     });
                 } else {
+                    Toast.show({
+                        topOffset: 60,
+                        type: "error",
+                        text1: data?.message || "Login failed",
+                        text2: "Please provide correct credentials",
+                    });
                     logoutUser(dispatch, reduxDispatch);
                 }
             });

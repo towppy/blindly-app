@@ -3,6 +3,7 @@ import {
     REMOVE_FROM_CART,
     CLEAR_CART,
     LOAD_CART,
+    SET_CART_ITEM_QUANTITY,
 } from '../constants';
 import {
     addCartItem,
@@ -63,14 +64,12 @@ export const clearCart = (userId) => {
 
 // Thunk: Update cart item quantity and persist to SQLite for a user
 export const updateCartItemQuantity = (item, quantity, userId) => {
-    return async (dispatch, getState) => {
+    return async (dispatch) => {
         if (!userId) return;
-        // Update the item in Redux state
         const updatedItem = { ...item, quantity };
-        // Remove the old item and add the updated one
-        dispatch({ type: REMOVE_FROM_CART, payload: item });
-        dispatch({ type: ADD_TO_CART, payload: updatedItem });
-        // Persist to SQLite
+        // Set exact quantity (do not merge-add for this action)
+        dispatch({ type: SET_CART_ITEM_QUANTITY, payload: { item, quantity } });
+        // Persist to SQLite as the latest value
         await addCartItem(updatedItem, userId);
     };
 };
