@@ -13,7 +13,8 @@
 //const BACKEND_HOST = 'http://192.168.0.103:4000';
 
 //ngrok
-const BACKEND_HOST = "https://eastwardly-retreatal-kerstin.ngrok-free.dev";
+//const BACKEND_HOST = "https://eastwardly-retreatal-kerstin.ngrok-free.dev";
+const BACKEND_HOST = "https://untense-elaina-coltish.ngrok-free.dev";
 const baseURL = `${BACKEND_HOST}/api/v1/`;
 
 export default baseURL;

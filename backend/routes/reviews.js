@@ -75,24 +75,33 @@ router.get("/can-review/:productId", authJwt, async (req, res) => {
     }
 
     if (req.user?.isAdmin) {
-      return res.status(200).json({ canReview: false, existingReview: null });
+      return res.status(200).json({ canReview: false, eligibleOrders: [], existingReviews: [] });
     }
 
-    const order = await Order.findOne({
+    // Find all eligible orders for this product
+    const orders = await Order.find({
       user: req.user.userId,
       "orderItems.product": new mongoose.Types.ObjectId(productId),
       status: { $nin: ["cancelled"] },
     }).lean();
 
-    const existingReview = await Review.findOne({
+    // Find all reviews for this product by this user
+    const reviews = await Review.find({
       product: productId,
       user: req.user.userId,
       isActive: { $ne: false },
     }).lean();
 
+    // For each order, check if a review exists
+    const reviewMap = new Map();
+    reviews.forEach(r => reviewMap.set(String(r.order), r));
+
+    const eligibleOrders = orders.filter(o => !reviewMap.has(String(o._id)));
+
     res.status(200).json({
-      canReview: !!order && !existingReview,
-      existingReview: existingReview || null,
+      canReview: eligibleOrders.length > 0,
+      eligibleOrders,
+      existingReviews: reviews,
     });
   } catch {
     res.status(500).json({ message: "Failed to check review eligibility" });
@@ -106,10 +115,13 @@ router.post("/", authJwt, reviewUpload.array("images", 5), async (req, res) => {
       return res.status(403).json({ message: "Admins cannot post reviews" });
     }
 
-    const { productId, rating, comment } = req.body;
+    const { productId, rating, comment, orderId } = req.body;
 
     if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
       return res.status(400).json({ message: "Valid productId is required" });
+    }
+    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({ message: "Valid orderId is required" });
     }
 
     const parsedRating = Number(rating);
@@ -123,6 +135,7 @@ router.post("/", authJwt, reviewUpload.array("images", 5), async (req, res) => {
     }
 
     const order = await Order.findOne({
+      _id: orderId,
       user: req.user.userId,
       "orderItems.product": new mongoose.Types.ObjectId(productId),
       status: { $nin: ["cancelled"] },
@@ -131,7 +144,7 @@ router.post("/", authJwt, reviewUpload.array("images", 5), async (req, res) => {
     if (!order) {
       return res
         .status(403)
-        .json({ message: "You can only review products from non-cancelled orders" });
+        .json({ message: "You can only review products from your non-cancelled orders" });
     }
 
     const cleanComment = filter.clean(String(comment || "").trim());
@@ -140,6 +153,7 @@ router.post("/", authJwt, reviewUpload.array("images", 5), async (req, res) => {
     const softDeleted = await Review.findOne({
       product: productId,
       user: req.user.userId,
+      order: orderId,
       isActive: false,
     });
 
@@ -148,7 +162,7 @@ router.post("/", authJwt, reviewUpload.array("images", 5), async (req, res) => {
       softDeleted.rating = parsedRating;
       softDeleted.comment = cleanComment;
       softDeleted.images = uploadedImages;
-
+      softDeleted.order = orderId;
       await softDeleted.save();
       return res.status(201).json(softDeleted);
     }
@@ -156,6 +170,7 @@ router.post("/", authJwt, reviewUpload.array("images", 5), async (req, res) => {
     const review = await Review.create({
       product: productId,
       user: req.user.userId,
+      order: orderId,
       rating: parsedRating,
       comment: cleanComment,
       images: uploadedImages,
@@ -163,13 +178,13 @@ router.post("/", authJwt, reviewUpload.array("images", 5), async (req, res) => {
 
     res.status(201).json(review);
   } catch (err) {
+    console.error('POST /api/v1/reviews error:', err);
     if (err.code === 11000) {
       return res.status(409).json({
-        message: "You have already reviewed this product",
+        message: "You have already reviewed this product for this order",
       });
     }
-
-    res.status(500).json({ message: "Failed to submit review" });
+    res.status(500).json({ message: "Failed to submit review", error: err.message || err });
   }
 });
 

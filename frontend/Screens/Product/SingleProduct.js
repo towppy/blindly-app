@@ -60,6 +60,8 @@ const SingleProduct = ({ route }) => {
     const cartItems = useSelector((state) => state.cartItems);
     const [canReview, setCanReview] = useState(false);
     const [myReview, setMyReview] = useState(null);
+    const [eligibleOrders, setEligibleOrders] = useState([]);
+    const [selectedOrderId, setSelectedOrderId] = useState("");
 
     // New review form state
     const [rating, setRating] = useState(5);
@@ -89,6 +91,12 @@ const SingleProduct = ({ route }) => {
                 headers: { Authorization: `Bearer ${token || ""}` },
             });
             setCanReview(res.data.canReview);
+            setEligibleOrders(res.data.eligibleOrders || []);
+            if (res.data.eligibleOrders && res.data.eligibleOrders.length > 0) {
+                setSelectedOrderId(res.data.eligibleOrders[0]._id);
+            } else {
+                setSelectedOrderId("");
+            }
             if (res.data.existingReview) {
                 const r = res.data.existingReview;
                 setMyReview(r);
@@ -114,9 +122,15 @@ const SingleProduct = ({ route }) => {
     const submitReview = async () => {
         setSubmitting(true);
         try {
+            if (!selectedOrderId) {
+                Toast.show({ type: "error", text1: "Please select an order to review" });
+                setSubmitting(false);
+                return;
+            }
             const token = await getJwt();
             const formData = new FormData();
             formData.append("productId", productId);
+            formData.append("orderId", selectedOrderId);
             formData.append("rating", String(rating));
             formData.append("comment", comment || "");
             reviewImages.forEach((uri, idx) => {
@@ -480,6 +494,24 @@ const SingleProduct = ({ route }) => {
                 {isAuthenticated && !isAdmin && canReview && !myReview ? (
                     <View style={styles.reviewForm}>
                         <Text style={styles.formTitle}>Write a Review</Text>
+                        {eligibleOrders.length > 1 && (
+                            <View style={{ marginBottom: 10 }}>
+                                <Text style={{ fontSize: 13, fontWeight: "600", color: "#7c3aed", marginBottom: 4 }}>Select Order</Text>
+                                <Picker
+                                    selectedValue={selectedOrderId}
+                                    onValueChange={setSelectedOrderId}
+                                    style={{ backgroundColor: "#f5f1ff", borderRadius: 8 }}
+                                >
+                                    {eligibleOrders.map((order) => (
+                                        <Picker.Item
+                                            key={order._id}
+                                            label={`Order #${order._id.slice(-6)} (${new Date(order.dateOrdered).toLocaleDateString()})`}
+                                            value={order._id}
+                                        />
+                                    ))}
+                                </Picker>
+                            </View>
+                        )}
                         <StarRow rating={rating} onSelect={setRating} size={28} />
                         <TextInput
                             style={styles.input}
