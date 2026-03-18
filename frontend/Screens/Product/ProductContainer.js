@@ -8,6 +8,7 @@ import {
     TextInput,
     StatusBar,
     Alert,
+    FlatList,
 } from "react-native";
 import { Surface } from "react-native-paper";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
@@ -384,11 +385,17 @@ const ProductContainer = () => {
 
                     {/* Product Grid */}
                     {productsCtg.length > 0 ? (
-                        <View style={styles.listContainer}>
-                            {productsCtg.map((item) => (
-                                <ProductList key={item.id || item._id} item={item} />
-                            ))}
-                        </View>
+                        <FlatList
+                            data={productsCtg}
+                            keyExtractor={(item) => String(item.id || item._id)}
+                            numColumns={2}
+                            columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 10 }}
+                            contentContainerStyle={{ paddingBottom: 30, paddingTop: 4 }}
+                            renderItem={({ item }) => (
+                                <ProductList item={item} />
+                            )}
+                            ListEmptyComponent={null}
+                        />
                     ) : (
                         <View style={[styles.center, { height: height / 2 }]}>
                             <Ionicons name="cube-outline" size={48} color="#c4b8e8" />
