@@ -174,6 +174,7 @@ router.post("/", authJwt, async (req, res) => {
       dateOrdered: new Date(),
     });
 
+    // Notify all admins
     const admins = await User.find({ isAdmin: true, "pushTokens.0": { $exists: true } }, "pushTokens").lean();
     const adminTokens = admins.flatMap((a) => (a.pushTokens || []).map((t) => ({ token: t.token, type: t.type })));
     await sendToTokens(adminTokens, {
@@ -181,6 +182,16 @@ router.post("/", authJwt, async (req, res) => {
       body: `Order ${order.id} has been placed.`,
       data: { orderId: order.id },
     });
+
+    // Notify the user who placed the order - FIXED THE QUOTE ISSUE HERE
+    if (userProfile.pushTokens && userProfile.pushTokens.length > 0) {
+      const userTokens = userProfile.pushTokens.map((t) => ({ token: t.token, type: t.type }));
+      await sendToTokens(userTokens, {
+        title: "Order placed successfully!",
+        body: `Your order ${order.id} has been received and is now pending.`, // Fixed: changed " to `
+        data: { orderId: order.id, screen: "MyOrders", status: STATUS.PENDING },
+      });
+    }
 
     return res.status(201).json(order);
   } catch (error) {
@@ -286,11 +297,18 @@ router.put("/:id", authJwt, async (req, res) => {
     const recipient = await User.findById(existing.user).lean();
     if (recipient?.pushTokens?.length > 0) {
       const recipientTokens = (recipient.pushTokens || []).map((t) => ({ token: t.token, type: t.type }));
-      await sendToTokens(recipientTokens, {
+      const payload = {
         title: "Order status updated",
         body: `Order ${updated.id} is now ${desiredStatus}.`,
         data: { screen: "MyOrders", orderId: updated.id, status: desiredStatus },
-      });
+      };
+      console.log("[orders] Sending notification to user:", recipientTokens, payload);
+      try {
+        await sendToTokens(recipientTokens, payload);
+        console.log("[orders] Notification sent to user");
+      } catch (err) {
+        console.error("[orders] Error sending notification to user:", err);
+      }
     }
 
     // If a user made the update, also notify all admins
@@ -298,11 +316,18 @@ router.put("/:id", authJwt, async (req, res) => {
       const admins = await User.find({ isAdmin: true, "pushTokens.0": { $exists: true } }, "pushTokens").lean();
       const adminTokens = admins.flatMap((a) => (a.pushTokens || []).map((t) => ({ token: t.token, type: t.type })));
       if (adminTokens.length > 0) {
-        await sendToTokens(adminTokens, {
+        const adminPayload = {
           title: "Order updated by customer",
           body: `Order ${updated.id} was changed to ${desiredStatus} by the customer.`,
           data: { orderId: updated.id, status: desiredStatus },
-        });
+        };
+        console.log("[orders] Sending notification to admins:", adminTokens, adminPayload);
+        try {
+          await sendToTokens(adminTokens, adminPayload);
+          console.log("[orders] Notification sent to admins");
+        } catch (err) {
+          console.error("[orders] Error sending notification to admins:", err);
+        }
       }
     }
 

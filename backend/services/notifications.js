@@ -6,6 +6,10 @@ const config = require("../config");
 let firebaseInitialized = false;
 
 function initFirebase() {
+  if (admin.apps && admin.apps.length > 0) {
+    firebaseInitialized = true;
+    return;
+  }
   if (firebaseInitialized) return;
   if (!config.fcmServiceAccountPath) {
     console.warn("[notifications] Missing FCM_SERVICE_ACCOUNT_PATH, skipping Firebase init.");
@@ -28,25 +32,32 @@ function initFirebase() {
 
 // Send via Firebase Cloud Messaging (for FCM device tokens from APK)
 async function sendFCM(tokens, title, body, data) {
-  initFirebase();
-  if (!firebaseInitialized || tokens.length === 0) return;
+      try {
+      console.log("[notifications] sendFCM called with:", JSON.stringify({ tokens, title, body, data }));
+    initFirebase();
+    if (!firebaseInitialized || tokens.length === 0) {
+      console.log("[notifications] FCM not initialized or no tokens", { firebaseInitialized, tokens });
+      return;
+    }
 
-  const message = {
-    tokens,
-    notification: { title: title || "", body: body || "" },
-    data: data || {},
-    android: {
-      priority: "high",
-      notification: {
-        sound: "default",
-        channelId: "default",
+    const message = {
+      tokens,
+      notification: { title: title || "", body: body || "" },
+      data: data || {},
+      android: {
+        priority: "high",
+        notification: {
+          sound: "default",
+          channelId: "default",
+        },
       },
-    },
-  };
+    };
 
-  try {
+    console.log("[notifications] FCM about to send message:", JSON.stringify(message));
     const result = await admin.messaging().sendEachForMulticast(message);
+    console.log("[notifications] FCM sendEachForMulticast completed");
     console.log(`[notifications] FCM sent: ${result.successCount} success, ${result.failureCount} failed`);
+    console.log("[notifications] FCM send result:", JSON.stringify(result));
 
     if (Array.isArray(result.responses) && result.responses.length > 0) {
       const staleTokens = [];
@@ -70,7 +81,7 @@ async function sendFCM(tokens, title, body, data) {
       }
     }
   } catch (error) {
-    console.warn("[notifications] FCM send error:", error.message);
+    console.error("[notifications] sendFCM unexpected error:", error);
   }
 }
 
@@ -123,6 +134,8 @@ async function sendExpo(tokens, title, body, data) {
 
 // Main function - routes tokens to the correct service
 async function sendToTokens(tokens, payload) {
+
+  console.log("[notifications] sendToTokens called with:", JSON.stringify({ tokens, payload }));
   if (!tokens || tokens.length === 0) return;
 
   const { title, body, data } = payload || {};

@@ -9,6 +9,56 @@ const { sendToTokens } = require("../services/notifications");
 
 const router = express.Router();
 
+// Expo token regex
+const expoTokenRegex = /^ExponentPushToken\[[\w-]+\]$/;
+
+// PUT: Register push token
+router.put('/user/:userId/push-token', authJwt, async (req, res) => {
+  const { userId } = req.params;
+  const { pushToken } = req.body;
+  const requesterId = req.user.id;
+  const requesterIsAdmin = req.user.role === 'admin';
+
+  if (!pushToken || !expoTokenRegex.test(pushToken)) {
+    return res.status(400).json({ error: 'Invalid Expo push token.' });
+  }
+
+  if (requesterId !== userId && !requesterIsAdmin) {
+    return res.status(403).json({ error: 'Forbidden.' });
+  }
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    user.pushToken = pushToken;
+    await user.save();
+    return res.json({ success: true, pushToken });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// DELETE: Remove push token
+router.delete('/user/:userId/push-token', authJwt, async (req, res) => {
+  const { userId } = req.params;
+  const requesterId = req.user.id;
+  const requesterIsAdmin = req.user.role === 'admin';
+
+  if (requesterId !== userId && !requesterIsAdmin) {
+    return res.status(403).json({ error: 'Forbidden.' });
+  }
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    user.pushToken = undefined;
+    await user.save();
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error.' });
+  }
+});
+
 function detectSupportIntent(message) {
   const text = String(message || "").toLowerCase();
 

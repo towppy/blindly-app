@@ -17,25 +17,27 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.peakplay.itcp239",
+      "package": "com.blindly.telaia",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "6f747b51-b33e-4c6e-9d11-89bf760ec81a"
+        "projectId": "5eb3d6aa-aa51-4cc3-a187-4984faec96e6"
       },
       "googleClientId": "983469817404-d7225crk182q0s7n3ut5n73jdjhvjf7u.apps.googleusercontent.com"
     },
     "plugins": [
       "expo-sqlite",
       "expo-secure-store"
-    ]
+    ],
+    "owner": "towppy"
   }
 }
