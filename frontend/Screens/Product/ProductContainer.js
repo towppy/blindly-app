@@ -50,17 +50,23 @@ const ProductContainer = () => {
     const [claimedVoucherIds, setClaimedVoucherIds] = useState(new Set());
     const [claimingVoucherId, setClaimingVoucherId] = useState(null);
 
+    const isAuthenticated = context?.stateUser?.isAuthenticated;
+
     const welcomeName =
         context?.stateUser?.userProfile?.name ||
         context?.stateUser?.user?.name ||
         "Shopper";
 
-    const loadVouchers = useCallback(async () => {
+    // FIX: Separated loadVouchers from useFocusEffect cleanup
+    // and removed it from the dependency array to avoid stale closure loop.
+    const loadVouchers = async () => {
         try {
             const availableRes = await axios.get(`${baseURL}vouchers/available`);
-            setVouchers(availableRes.data || []);
+            const voucherData = availableRes.data || [];
+            console.log("Vouchers fetched:", voucherData.length); // debug
+            setVouchers(voucherData);
 
-            if (context?.stateUser?.isAuthenticated) {
+            if (isAuthenticated) {
                 const token = await getJwt();
                 const claimedRes = await axios.get(`${baseURL}vouchers/claimed/me`, {
                     headers: { Authorization: `Bearer ${token || ""}` },
@@ -72,13 +78,15 @@ const ProductContainer = () => {
             } else {
                 setClaimedVoucherIds(new Set());
             }
-        } catch (_error) {
+        } catch (error) {
+            // FIX: Log the error so you can see what's actually failing
+            console.log("Voucher load error:", error?.response?.data || error.message);
             setVouchers([]);
         }
-    }, [context?.stateUser?.isAuthenticated]);
+    };
 
     const handleClaimVoucher = async (voucherId) => {
-        if (!context?.stateUser?.isAuthenticated) {
+        if (!isAuthenticated) {
             Alert.alert("Login required", "Please login to claim vouchers.");
             navigation.navigate("User", { screen: "Login" });
             return;
@@ -145,6 +153,8 @@ const ProductContainer = () => {
         setProductsCtg(filtered);
     };
 
+    // FIX: Removed loadVouchers from dependency array and from cleanup.
+    // Vouchers should NOT be cleared on screen blur — only re-fetched on focus.
     useFocusEffect(
         useCallback(() => {
             setFocus(false);
@@ -155,12 +165,14 @@ const ProductContainer = () => {
                 .then((res) => setCategories(res.data))
                 .catch(() => console.log("Api categories call error"));
             loadVouchers();
+
+            // FIX: Only reset UI state, not vouchers — vouchers are valid until refetched
             return () => {
                 setProductsFiltered([]);
                 setCategories([]);
-                setVouchers([]);
+                // Removed: setVouchers([]) ← this was clearing vouchers on every blur
             };
-        }, [dispatch, loadVouchers])
+        }, [dispatch, isAuthenticated]) // FIX: depend on isAuthenticated directly, not loadVouchers
     );
 
     return (
@@ -285,7 +297,7 @@ const ProductContainer = () => {
                         <ProductList item={item} />
                     )}
                     ListEmptyComponent={
-                        <View style={[styles.center, { height: height / 2 }]}> 
+                        <View style={[styles.center, { height: height / 2 }]}>
                             <Ionicons name="cube-outline" size={48} color="#c4b8e8" />
                             <Text style={styles.emptyText}>No products found</Text>
                         </View>
@@ -312,6 +324,7 @@ const ProductContainer = () => {
                                 </View>
                             </TouchableOpacity>
 
+                            {/* Vouchers */}
                             {vouchers.length > 0 && (
                                 <View style={{ marginHorizontal: 14, marginBottom: 14 }}>
                                     <View style={styles.sectionHeader}>
@@ -319,10 +332,10 @@ const ProductContainer = () => {
                                     </View>
                                     <ScrollView
                                         horizontal
-                                        pagingEnabled
                                         showsHorizontalScrollIndicator={false}
                                         decelerationRate="fast"
                                         snapToInterval={width * 0.58 + 10}
+                                        contentContainerStyle={{ paddingRight: 14 }}
                                     >
                                         {vouchers.map((voucher) => {
                                             const voucherId = String(voucher.id || voucher._id);
@@ -353,7 +366,9 @@ const ProductContainer = () => {
                                                     <Text style={{ color: "#6d6297", marginTop: 4, fontSize: 12 }} numberOfLines={2}>
                                                         {voucher.description || "Discount voucher"}
                                                     </Text>
-                                                    <Text style={{ color: "#8677b6", marginTop: 4, fontSize: 11 }} numberOfLines={1}>{appliesText}</Text>
+                                                    <Text style={{ color: "#8677b6", marginTop: 4, fontSize: 11 }} numberOfLines={1}>
+                                                        {appliesText}
+                                                    </Text>
                                                     <Text style={{ color: "#8677b6", marginTop: 2, fontSize: 11 }}>
                                                         Claim valid for {Number(voucher.dateExpirationAfterClaimDays || 0)} day(s)
                                                     </Text>
@@ -372,7 +387,11 @@ const ProductContainer = () => {
                                                         }}
                                                     >
                                                         <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
-                                                            {alreadyClaimed ? "Claimed" : claimingVoucherId === voucherId ? "Claiming..." : "Claim Voucher"}
+                                                            {alreadyClaimed
+                                                                ? "Claimed"
+                                                                : claimingVoucherId === voucherId
+                                                                ? "Claiming..."
+                                                                : "Claim Voucher"}
                                                         </Text>
                                                     </TouchableOpacity>
                                                 </View>
