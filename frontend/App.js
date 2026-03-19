@@ -202,7 +202,7 @@ function AppInner() {
     const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.orderId && navigationRef.isReady()) {
-        navigationRef.navigate('Order Detail', { orderId: data.orderId });
+        navigationRef.navigate('OrderDetail', { orderId: data.orderId });
       } else if (data?.screen === "MyOrders" && navigationRef.isReady()) {
         navigationRef.navigate('MyOrders');
       }
