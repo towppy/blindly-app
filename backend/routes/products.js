@@ -6,12 +6,14 @@ const cloudinary = require("../config/cloudinary"); // You'll need to create thi
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const authJwt = require("../middleware/authJwt");
 const Product = require("../models/Product");
+const Promo = require("../models/Promo");
 const StockAlert = require("../models/StockAlert");
 const User = require("../models/User");
 const { sendToTokens } = require("../services/notifications");
 const config = require("../config");
 
 const router = express.Router();
+const MAX_PRODUCT_IMAGES = 10;
 
 // Configure Cloudinary storage
 const storage = new CloudinaryStorage({
@@ -29,6 +31,64 @@ const upload = multer({
 });
 
 const STOCK_LOW_THRESHOLD = 10;
+
+function applyPromoToProduct(productDoc, promoDoc) {
+  const product = typeof productDoc.toJSON === "function" ? productDoc.toJSON() : { ...productDoc };
+  const originalPrice = Number(product.price || 0);
+
+  if (!promoDoc) {
+    return {
+      ...product,
+      originalPrice,
+      effectivePrice: originalPrice,
+      hasActivePromo: false,
+      promo: null,
+    };
+  }
+
+  const discountPercent = Number(promoDoc.discountPercent || 0);
+  const discounted = Number((originalPrice * (1 - discountPercent / 100)).toFixed(2));
+
+  return {
+    ...product,
+    originalPrice,
+    effectivePrice: discounted,
+    hasActivePromo: true,
+    promo: {
+      id: String(promoDoc.id || promoDoc._id),
+      name: promoDoc.name,
+      description: promoDoc.description || "",
+      discountPercent,
+      startsAt: promoDoc.startsAt,
+      endsAt: promoDoc.endsAt,
+    },
+  };
+}
+
+async function getBestActivePromosByProductId(productIds) {
+  if (!Array.isArray(productIds) || productIds.length === 0) return new Map();
+
+  const now = new Date();
+  const promos = await Promo.find({
+    isActive: true,
+    startsAt: { $lte: now },
+    endsAt: { $gte: now },
+    product: { $in: productIds },
+  })
+    .select("name description discountPercent startsAt endsAt product")
+    .lean();
+
+  const bestByProduct = new Map();
+  for (const promo of promos) {
+    const key = String(promo.product);
+    const existing = bestByProduct.get(key);
+    if (!existing || Number(promo.discountPercent || 0) > Number(existing.discountPercent || 0)) {
+      bestByProduct.set(key, promo);
+    }
+  }
+
+  return bestByProduct;
+}
 
 async function notifyAdmins(title, body) {
   try {
@@ -100,7 +160,10 @@ async function updateStockAlerts(product) {
 router.get("/", async (_req, res) => {
   try {
     const products = await Product.find({ isActive: { $ne: false } }).populate("category", "id name color");
-    return res.status(200).json(products);
+    const productIds = products.map((p) => p._id);
+    const bestPromosByProductId = await getBestActivePromosByProductId(productIds);
+    const enriched = products.map((p) => applyPromoToProduct(p, bestPromosByProductId.get(String(p._id))));
+    return res.status(200).json(enriched);
   } catch (_error) {
     return res.status(500).json({ message: "Failed to load products" });
   }
@@ -111,14 +174,16 @@ router.get("/:id", async (req, res) => {
   try {
     const product = await Product.findById(req.params.id).populate("category", "id name color");
     if (!product) return res.status(404).json({ message: "Product not found" });
-    return res.status(200).json(product);
+    const promoByProductId = await getBestActivePromosByProductId([product._id]);
+    const enriched = applyPromoToProduct(product, promoByProductId.get(String(product._id)));
+    return res.status(200).json(enriched);
   } catch (_error) {
     return res.status(500).json({ message: "Failed to load product" });
   }
 });
 
 // POST /products — admin only, multipart
-router.post("/", authJwt, upload.array("images", 10), async (req, res) => {
+router.post("/", authJwt, upload.array("images", MAX_PRODUCT_IMAGES), async (req, res) => {
   try {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
@@ -150,13 +215,19 @@ router.post("/", authJwt, upload.array("images", 10), async (req, res) => {
     await updateStockAlerts(product);
     return res.status(201).json(populated);
   } catch (error) {
+    if (error?.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ message: `Image is too large. Max file size is ${config.maxFileSizeMb}MB per image.` });
+    }
+    if (error?.code === "LIMIT_UNEXPECTED_FILE") {
+      return res.status(400).json({ message: `Too many images. Maximum is ${MAX_PRODUCT_IMAGES}.` });
+    }
     console.error('[POST /products] Error:', error.message, error.stack);
     return res.status(500).json({ message: "Failed to create product", error: error.message });
   }
 });
 
 // PUT /products/:id — admin only, multipart
-router.put("/:id", authJwt, upload.array("images", 10), async (req, res) => {
+router.put("/:id", authJwt, upload.array("images", MAX_PRODUCT_IMAGES), async (req, res) => {
   try {
     if (!req.user?.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
@@ -205,6 +276,12 @@ if (req.files && req.files.length > 0) {
 
     return res.status(200).json(updated);
   } catch (error) {
+    if (error?.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ message: `Image is too large. Max file size is ${config.maxFileSizeMb}MB per image.` });
+    }
+    if (error?.code === "LIMIT_UNEXPECTED_FILE") {
+      return res.status(400).json({ message: `Too many images. Maximum is ${MAX_PRODUCT_IMAGES}.` });
+    }
     console.error('[PUT /products/:id] Full error:', JSON.stringify(error, null, 2));
     console.error('[PUT /products/:id] Message:', error.message);
     console.error('[PUT /products/:id] Stack:', error.stack);

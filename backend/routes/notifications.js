@@ -5,6 +5,9 @@ const config = require("../config");
 const authJwt = require("../middleware/authJwt");
 const User = require("../models/User");
 const Order = require("../models/Order");
+const Voucher = require("../models/Voucher");
+const Promo = require("../models/Promo");
+const Product = require("../models/Product");
 const { sendToTokens } = require("../services/notifications");
 
 const router = express.Router();
@@ -62,8 +65,15 @@ router.delete('/user/:userId/push-token', authJwt, async (req, res) => {
 function detectSupportIntent(message) {
   const text = String(message || "").toLowerCase();
 
+  if (/(how.*(app|system|blindly)|what.*(can|do)|features|about|guide|help me use)/.test(text)) {
+    return "system_overview";
+  }
+
   if (/(track|where|status|late|delay).*(order)|order.*(track|status|where|late|delay)/.test(text)) {
     return "order_tracking";
+  }
+  if (/(verify|verification).*(email|account)|email.*(verify|verification)/.test(text)) {
+    return "email_verification";
   }
   if (/(cancel|refund|return)/.test(text)) {
     return "order_changes";
@@ -95,6 +105,11 @@ function buildSuggestionsForIntent(intent) {
       "How do refunds work for cancelled orders?",
       "What if my order is already shipped?",
     ],
+    email_verification: [
+      "How do I verify my email before login?",
+      "How can I resend verification email?",
+      "What if my verification link expired?",
+    ],
     voucher: [
       "Why is my voucher not applying?",
       "Where can I claim vouchers?",
@@ -114,6 +129,11 @@ function buildSuggestionsForIntent(intent) {
       "Why am I not receiving order notifications?",
       "How do I enable push notifications?",
       "How can I open order details from a notification?",
+    ],
+    system_overview: [
+      "Explain how Blindly ordering works",
+      "How do vouchers and promos differ?",
+      "Where do I verify my email account?",
     ],
     general: [
       "Help me track an order",
@@ -179,11 +199,86 @@ function buildOrderSnapshotText(orders) {
   return `Recent orders:\n${lines.join("\n")}`;
 }
 
+async function loadSystemSnapshot() {
+  const now = new Date();
+  const [availableVoucherCount, activePromoCount, productCount] = await Promise.all([
+    Voucher.countDocuments({ isActive: true, dateExpirationShop: { $gte: now } }),
+    Promo.countDocuments({ isActive: true, startsAt: { $lte: now }, endsAt: { $gte: now } }),
+    Product.countDocuments({ isActive: { $ne: false } }),
+  ]);
+
+  const sampleVouchers = await Voucher.find({ isActive: true, dateExpirationShop: { $gte: now } })
+    .sort({ createdAt: -1 })
+    .limit(2)
+    .select("name discountPercent dateExpirationShop")
+    .lean();
+
+  const samplePromos = await Promo.find({ isActive: true, startsAt: { $lte: now }, endsAt: { $gte: now } })
+    .sort({ createdAt: -1 })
+    .limit(2)
+    .populate("product", "name")
+    .select("name discountPercent endsAt product")
+    .lean();
+
+  return {
+    productCount,
+    availableVoucherCount,
+    activePromoCount,
+    sampleVouchers: sampleVouchers.map((v) => ({
+      name: v.name,
+      discountPercent: Number(v.discountPercent || 0),
+      endsAt: v.dateExpirationShop,
+    })),
+    samplePromos: samplePromos.map((p) => ({
+      name: p.name,
+      productName: p.product?.name || "Unknown product",
+      discountPercent: Number(p.discountPercent || 0),
+      endsAt: p.endsAt,
+    })),
+  };
+}
+
+function buildSystemSnapshotText(snapshot) {
+  const vouchersText = (snapshot.sampleVouchers || []).length
+    ? snapshot.sampleVouchers
+        .map((v) => `${v.name} (${v.discountPercent}% until ${new Date(v.endsAt).toLocaleDateString()})`)
+        .join("; ")
+    : "No sample vouchers";
+
+  const promosText = (snapshot.samplePromos || []).length
+    ? snapshot.samplePromos
+        .map((p) => `${p.name} on ${p.productName} (${p.discountPercent}% until ${new Date(p.endsAt).toLocaleDateString()})`)
+        .join("; ")
+    : "No sample promos";
+
+  return (
+    `System snapshot: activeProducts=${snapshot.productCount}, availableVouchers=${snapshot.availableVoucherCount}, activePromos=${snapshot.activePromoCount}. ` +
+    `Voucher samples: ${vouchersText}. Promo samples: ${promosText}.`
+  );
+}
+
 function buildFallbackReply(message, options = {}) {
   const text = String(message || "").toLowerCase();
   const intent = options.intent || detectSupportIntent(message);
   const recentOrders = Array.isArray(options.recentOrders) ? options.recentOrders : [];
   const mentionedOrderId = options.mentionedOrderId || "";
+  const systemSnapshot = options.systemSnapshot || {};
+
+  if (intent === "system_overview") {
+    return [
+      "Blindly lets users browse products, claim vouchers, and buy discounted items with limited-time promos.",
+      `Current setup has ${Number(systemSnapshot.productCount || 0)} active products, ${Number(systemSnapshot.availableVoucherCount || 0)} available vouchers, and ${Number(systemSnapshot.activePromoCount || 0)} active promos.`,
+      "Users should verify email before first login, then use Home for vouchers/promos, Product Detail for price breakdown, Checkout for payment, and My Orders for tracking.",
+    ].join(" ");
+  }
+
+  if (intent === "email_verification") {
+    return [
+      "Email verification is required before first login.",
+      "Use the verification link sent to your email, or open Verify Email screen and paste the token/link.",
+      "If the link expires, use Resend verification email from Login or Verify Email screen.",
+    ].join(" ");
+  }
 
   if (intent === "order_tracking") {
     const matchedOrder = mentionedOrderId
@@ -248,7 +343,7 @@ function buildFallbackReply(message, options = {}) {
   }
 
   return [
-    "I can help with order tracking, order issues, checkout, vouchers, payment problems, and app/account settings.",
+    "I can help with order tracking, order issues, checkout, vouchers, promos, payment problems, app/account settings, and system usage guidance.",
     "Share details like order ID, current status, and the exact error message for faster help.",
     "I can guide you step-by-step for both order concerns and system/app concerns."
   ].join(" ");
@@ -317,7 +412,10 @@ router.post("/chat-assistant", async (req, res) => {
       .map((m) => ({ role: m.role, content: String(m.content).slice(0, 600) }));
 
     const requestUser = extractAuthUser(req);
-    const recentOrders = await loadRecentOrdersForUser(requestUser?.userId);
+    const [recentOrders, systemSnapshot] = await Promise.all([
+      loadRecentOrdersForUser(requestUser?.userId),
+      loadSystemSnapshot(),
+    ]);
     const intent = detectSupportIntent(message);
     const mentionedOrderId = extractOrderIdFromMessage(message);
     const suggestions = buildSuggestionsForIntent(intent);
@@ -326,7 +424,8 @@ router.post("/chat-assistant", async (req, res) => {
       role: "system",
       content:
         "You are Blindly Order and System Support Assistant. " +
-        "Your scope is only: order tracking/issues, checkout, voucher usage, payment problems, account/profile settings, and app/notification issues. " +
+        "Your scope is only: order tracking/issues, checkout, voucher and promo usage, payment problems, account/profile settings, email verification, and app/notification issues. " +
+        "Know these Blindly behaviors: vouchers are claimable coupons; promos are limited-time product discounts shown as effectivePrice with originalPrice crossed out on product/home; email verification is required before login; admins manage voucher/promo from Voucher/Promo Management screen. " +
         "Never answer unrelated topics; politely redirect to supported scope. " +
         "Respond like a support chatbot: acknowledge briefly, then provide clear steps. " +
         "When available, use the provided recent order context. " +
@@ -338,6 +437,7 @@ router.post("/chat-assistant", async (req, res) => {
       content:
         `Detected intent: ${intent}. ` +
         `${buildOrderSnapshotText(recentOrders)} ` +
+        `${buildSystemSnapshotText(systemSnapshot)} ` +
         "If user asks order status and no ID was provided, use most recent order as likely reference but mention assumption.",
     };
 
@@ -348,7 +448,7 @@ router.post("/chat-assistant", async (req, res) => {
         source: "fallback",
         focus: "orders_system",
         suggestions,
-        reply: buildFallbackReply(message, { intent, recentOrders, mentionedOrderId }),
+        reply: buildFallbackReply(message, { intent, recentOrders, mentionedOrderId, systemSnapshot }),
       });
     }
 
@@ -365,7 +465,7 @@ router.post("/chat-assistant", async (req, res) => {
         source: "fallback",
         focus: "orders_system",
         suggestions,
-        reply: buildFallbackReply(message, { intent, recentOrders, mentionedOrderId }),
+        reply: buildFallbackReply(message, { intent, recentOrders, mentionedOrderId, systemSnapshot }),
       });
     }
   } catch (_err) {

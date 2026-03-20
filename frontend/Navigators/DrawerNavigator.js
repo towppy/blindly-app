@@ -1,8 +1,9 @@
 import * as React from "react";
-import { Dimensions, useColorScheme, Image, View, Text } from "react-native";
+import { Dimensions, Image, View, Text } from "react-native";
 import { createDrawerNavigator } from "@react-navigation/drawer";
 import Main from "./Main";
 import DrawerContent from "../Shared/DrawerContent";
+import { ThemeContext } from "../Context/Store/Theme";
 
 
 const NativeDrawer = createDrawerNavigator();
@@ -94,8 +95,8 @@ const getDrawerStyles = (colorScheme) => {
 };
 
 const DrawerNavigator = () => {
-    const colorScheme = useColorScheme();
-    const { drawerStyle, overlayStyle, screenOptions } = getDrawerStyles(colorScheme);
+    const { mode } = React.useContext(ThemeContext);
+    const { drawerStyle, overlayStyle, screenOptions } = getDrawerStyles(mode);
 
     return (
         <NativeDrawer.Navigator

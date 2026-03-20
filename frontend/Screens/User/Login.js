@@ -1,5 +1,5 @@
-import React, { useState, useContext, useEffect } from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import React, { useState, useContext, useEffect, useRef } from "react";
+import { View, Text, TouchableOpacity, ActivityIndicator, Animated, Easing } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import FormContainer from "../../Shared/FormContainer";
 import AuthGlobal from "../../Context/Store/AuthGlobal";
@@ -28,12 +28,22 @@ const Login = () => {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const revealAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         if (context.stateUser.isAuthenticated === true) {
             navigation.navigate("User Profile");
         }
     }, [context.stateUser.isAuthenticated]);
+
+    useEffect(() => {
+        Animated.timing(revealAnim, {
+            toValue: 1,
+            duration: 520,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+        }).start();
+    }, [revealAnim]);
 
     const handleGoogleSignIn = async () => {
         setIsSubmitting(true);
@@ -116,6 +126,17 @@ Toast.show({ topOffset: 60, type: "success", text1: "Google login successful", t
                 onChangeText={setPassword}
             />
 
+            <Animated.View
+                style={[
+                    styles.formCard,
+                    {
+                        opacity: revealAnim,
+                        transform: [{
+                            translateY: revealAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }),
+                        }],
+                    },
+                ]}
+            >
             <View style={styles.buttonGroup}>
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
                 {isSubmitting && (
@@ -152,6 +173,7 @@ Toast.show({ topOffset: 60, type: "success", text1: "Google login successful", t
                     <Text style={styles.googleBtnText}>Sign in with Google</Text>
                 </TouchableOpacity>
             </View>
+            </Animated.View>
 
             <View style={styles.registerRow}>
                 <Text style={styles.registerPrompt}>Don't have an account yet?</Text>

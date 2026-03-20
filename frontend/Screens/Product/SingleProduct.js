@@ -97,8 +97,12 @@ const SingleProduct = ({ route }) => {
             } else {
                 setSelectedOrderId("");
             }
-            if (res.data.existingReview) {
-                const r = res.data.existingReview;
+            const ownReview = Array.isArray(res.data.existingReviews) && res.data.existingReviews.length > 0
+                ? res.data.existingReviews[0]
+                : null;
+
+            if (ownReview) {
+                const r = ownReview;
                 setMyReview(r);
                 setEditRating(r.rating);
                 setEditComment(r.comment || "");
@@ -294,6 +298,9 @@ const SingleProduct = ({ route }) => {
             : null;
 
     const myReviewId = myReview ? (myReview.id || myReview._id) : null;
+    const originalPrice = Number(item.originalPrice || item.price || 0);
+    const discountedPrice = Number(item.effectivePrice || item.price || 0);
+    const promoActive = item.hasActivePromo === true && discountedPrice < originalPrice;
 
     const increaseQty = () => {
         if (quantity < Math.max(1, stockCount)) {
@@ -333,7 +340,17 @@ const SingleProduct = ({ route }) => {
             dispatch(updateCartItemQuantity(existing, mergedQty, context?.stateUser?.user?.email));
             Toast.show({ type: "success", text1: "Cart quantity updated" });
         } else {
-            dispatch(addToCart({ ...item, quantity }, context?.stateUser?.user?.email));
+            dispatch(
+                addToCart(
+                    {
+                        ...item,
+                        quantity,
+                        originalPrice,
+                        price: promoActive ? discountedPrice : originalPrice,
+                    },
+                    context?.stateUser?.user?.email
+                )
+            );
             Toast.show({ type: "success", text1: "Added to cart" });
         }
 
@@ -429,7 +446,20 @@ const SingleProduct = ({ route }) => {
                     </Text>
                 </View>
 
-                <Text style={styles.price}>${Number(item.price || 0).toFixed(2)}</Text>
+                {promoActive ? (
+                    <View style={styles.promoPriceWrap}>
+                        <View style={styles.promoPriceRow}>
+                            <Text style={styles.promoPrice}>P{discountedPrice.toFixed(2)}</Text>
+                            <Text style={styles.originalPrice}>P{originalPrice.toFixed(2)}</Text>
+                            {!!item.promo?.name && <Text style={styles.promoNameTag}>{item.promo.name}</Text>}
+                        </View>
+                        <Text style={styles.promoEndsText}>
+                            Ends in: {item.promo?.endsAt ? new Date(item.promo.endsAt).toLocaleDateString() : "-"}
+                        </Text>
+                    </View>
+                ) : (
+                    <Text style={styles.price}>P{originalPrice.toFixed(2)}</Text>
+                )}
 
                 <View style={styles.purchaseBox}>
                     <View style={styles.quantityRow}>
@@ -732,6 +762,12 @@ const styles = StyleSheet.create({
     badge:           { backgroundColor: "#ede8fa", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
     badgeText:       { color: "#7c3aed", fontSize: 12, fontWeight: "600" },
     price:           { fontSize: 24, fontWeight: "800", color: "#e91e63", marginTop: 10, marginBottom: 4 },
+    promoPriceWrap:  { marginTop: 10, marginBottom: 4 },
+    promoPriceRow:   { flexDirection: "row", alignItems: "center", gap: 8 },
+    promoPrice:      { fontSize: 24, fontWeight: "800", color: "#e91e63" },
+    originalPrice:   { fontSize: 15, color: "#9b8ec4", textDecorationLine: "line-through", fontWeight: "600" },
+    promoNameTag:    { fontSize: 11, color: "#0f766e", backgroundColor: "#d1fae5", borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, fontWeight: "700" },
+    promoEndsText:   { marginTop: 2, color: "#7c3aed", fontWeight: "700", fontSize: 12 },
     purchaseBox:     { marginTop: 12, marginBottom: 6 },
     quantityRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
     quantityLabel:   { fontSize: 14, fontWeight: "700", color: "#3d2c8d" },

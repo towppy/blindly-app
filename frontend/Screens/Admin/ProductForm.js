@@ -25,6 +25,7 @@ import mime from "mime";
 import { Ionicons } from "@expo/vector-icons";
 
 const ProductForm = (props) => {
+    const MAX_IMAGES = 8;
     const [pickerValue, setPickerValue] = useState("");
     const [brand, setBrand] = useState("");
     const [name, setName] = useState("");
@@ -88,7 +89,7 @@ const ProductForm = (props) => {
             allowsMultipleSelection,
             allowsEditing: !allowsMultipleSelection, // disables editing if multiple
             aspect: [4, 3],
-            quality: 1,
+            quality: 0.55,
         });
         if (!result.canceled) {
             let uris = [];
@@ -97,7 +98,19 @@ const ProductForm = (props) => {
             } else if (result.uri) {
                 uris = [result.uri];
             }
-            setImages((prev) => uris.length > 1 ? [...prev, ...uris] : [...prev, ...uris]);
+            setImages((prev) => {
+                const merged = [...prev, ...uris];
+                const unique = [...new Set(merged)];
+                if (unique.length > MAX_IMAGES) {
+                    Toast.show({
+                        topOffset: 60,
+                        type: "info",
+                        text1: `Only ${MAX_IMAGES} images allowed`,
+                        text2: "Extra images were skipped.",
+                    });
+                }
+                return unique.slice(0, MAX_IMAGES);
+            });
             setMainImage(uris[0]);
             setImagePicked(true);
         }
@@ -112,11 +125,14 @@ const ProductForm = (props) => {
         const result = await ImagePicker.launchCameraAsync({
             allowsEditing: true,
             aspect: [4, 3],
-            quality: 1,
+            quality: 0.6,
         });
         if (!result.canceled) {
             const uri = result.assets[0].uri;
-            setImages((prev) => [...prev, uri]);
+            setImages((prev) => {
+                const merged = [...new Set([...prev, uri])];
+                return merged.slice(0, MAX_IMAGES);
+            });
             setMainImage(uri);
             setImagePicked(true);
         }
@@ -138,6 +154,10 @@ const ProductForm = (props) => {
         if (isSubmitting) return;
         if (!name || !brand || !price || !description || !category || !countInStock) {
             setError("Please fill in the form correctly");
+            return;
+        }
+        if (images.length > MAX_IMAGES) {
+            setError(`Only ${MAX_IMAGES} images are allowed`);
             return;
         }
         setIsSubmitting(true);
@@ -183,7 +203,9 @@ if (localImages.length > 0) {
         };
         const catchErr = (err) => {
             console.log('ProductForm error:', err?.response?.data || err?.message || err);
-            const msg = err?.response?.data?.message || err?.message || "Something went wrong";
+            const msg = err?.response?.status === 413
+                ? "Some images are too large. Use smaller images or fewer files."
+                : (err?.response?.data?.message || err?.message || "Something went wrong");
             Toast.show({ topOffset: 60, type: "error", text1: msg });
         };
         const request = productId

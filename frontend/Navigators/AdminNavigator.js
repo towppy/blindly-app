@@ -84,7 +84,7 @@ const AdminNavigator = () => {
             <Stack.Screen name="Reviews"            component={Reviews}           options={{ title: "Reviews" }} />
             <Stack.Screen name="Promo Notification" component={PromoNotification} options={{ title: "Send Promo" }} />
             <Stack.Screen name="Users"              component={AdminUsers}        options={{ title: "Users" }} />
-            <Stack.Screen name="Vouchers / Discounts" component={Vouchers}       options={{ title: "Vouchers / Discounts" }} />
+            <Stack.Screen name="Voucher/Promo Management" component={Vouchers}   options={{ title: "Voucher/Promo Management" }} />
             <Stack.Screen name="Push Diagnostics" component={PushDiagnostics}     options={{ title: "Push Diagnostics" }} />
         </Stack.Navigator>
     );

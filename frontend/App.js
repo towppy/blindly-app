@@ -6,15 +6,16 @@
  */
 import { StyleSheet, Platform } from 'react-native';
 import React, { useContext, useEffect } from 'react';
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef, DefaultTheme as NavDefaultTheme, DarkTheme as NavDarkTheme } from '@react-navigation/native';
 // Navigation ref for global navigation (for notification taps)
 export const navigationRef = createNavigationContainerRef();
-import { Provider as PaperProvider } from 'react-native-paper';
+import { Provider as PaperProvider, MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import { Provider, useDispatch } from 'react-redux';
 import store from './Redux/store';
 import Toast from 'react-native-toast-message';
 import Auth from './Context/Store/Auth';
 import DrawerNavigator from './Navigators/DrawerNavigator';
+import { ThemeProvider, ThemeContext } from './Context/Store/Theme';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -69,6 +70,33 @@ function CartLoader({ children }) {
 import { useNavigation } from '@react-navigation/native';
 function AppInner() {
   const context = useContext(AuthGlobal);
+  const { isDark } = useContext(ThemeContext);
+
+  const navTheme = {
+    ...(isDark ? NavDarkTheme : NavDefaultTheme),
+    colors: {
+      ...(isDark ? NavDarkTheme.colors : NavDefaultTheme.colors),
+      primary: '#7c3aed',
+      background: isDark ? '#120d1c' : '#f8f5ff',
+      card: isDark ? '#1a1025' : '#ffffff',
+      text: isDark ? '#f3ecff' : '#1a0a3c',
+      border: isDark ? '#33224f' : '#ece7f8',
+      notification: '#e91e63',
+    },
+  };
+
+  const paperTheme = {
+    ...(isDark ? MD3DarkTheme : MD3LightTheme),
+    colors: {
+      ...(isDark ? MD3DarkTheme.colors : MD3LightTheme.colors),
+      primary: '#7c3aed',
+      secondary: '#10b981',
+      background: isDark ? '#120d1c' : '#f8f5ff',
+      surface: isDark ? '#1a1025' : '#ffffff',
+      onSurface: isDark ? '#f3ecff' : '#1a0a3c',
+      outline: isDark ? '#33224f' : '#ece7f8',
+    },
+  };
 
   useEffect(() => {
     if (IS_EXPO_GO || Platform.OS !== 'android') return;
@@ -214,8 +242,8 @@ function AppInner() {
     <Provider store={store}>
       <SQLiteProvider databaseName="blindly_cart.db" onInit={migrateDatabase}>
         <CartLoader>
-        <NavigationContainer ref={navigationRef}>
-          <PaperProvider>
+        <NavigationContainer ref={navigationRef} theme={navTheme}>
+          <PaperProvider theme={paperTheme}>
             <DrawerNavigator />
           </PaperProvider>
         </NavigationContainer>
@@ -230,7 +258,9 @@ function AppInner() {
 export default function App() {
   return (
     <Auth>
-      <AppInner />
+      <ThemeProvider>
+        <AppInner />
+      </ThemeProvider>
     </Auth>
   );
 }

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
     View, Text, Image, TouchableOpacity,
     ActivityIndicator, Alert,
+    Animated, Easing,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useNavigation } from "@react-navigation/native";
@@ -34,6 +35,7 @@ const Register = () => {
     const [mainImage, setMainImage] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const navigation = useNavigation();
+    const revealAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         (async () => {
@@ -42,6 +44,15 @@ const Register = () => {
             await Location.getCurrentPositionAsync({});
         })();
     }, []);
+
+    useEffect(() => {
+        Animated.timing(revealAnim, {
+            toValue: 1,
+            duration: 560,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+        }).start();
+    }, [revealAnim]);
 
     const handleGoogleSignUp = async () => {
         setIsSubmitting(true);
@@ -207,9 +218,9 @@ const Register = () => {
                         topOffset: 60, 
                         type: "success", 
                         text1: "Account created!", 
-                        text2: "Please login to continue" 
+                        text2: "Check your email to verify before login" 
                     });
-                    setTimeout(() => navigation.navigate("Login"), 500);
+                    setTimeout(() => navigation.navigate("Verify Email", { email }), 500);
                 }
             })
             .catch((err) => {
@@ -281,6 +292,17 @@ const Register = () => {
                     value={password}
                 />
 
+                <Animated.View
+                    style={[
+                        styles.formCard,
+                        {
+                            opacity: revealAnim,
+                            transform: [{
+                                translateY: revealAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }),
+                            }],
+                        },
+                    ]}
+                >
                 <View style={styles.buttonGroup}>
                     {error ? <Text style={styles.errorText}>{error}</Text> : null}
                     {isSubmitting && (
@@ -316,6 +338,7 @@ const Register = () => {
                     <Ionicons name="logo-google" size={18} color="#DB4437" />
                     <Text style={styles.googleBtnText}>Sign up with Google</Text>
                 </TouchableOpacity>
+                </Animated.View>
 
             </FormContainer>
         </KeyboardAwareScrollView>

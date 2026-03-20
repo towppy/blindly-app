@@ -1,12 +1,14 @@
 import React from "react";
-import { ScrollView, Dimensions, StyleSheet, Text } from "react-native";
+import { ScrollView, Dimensions, StyleSheet, Text, View } from "react-native";
 
 var { width } = Dimensions.get("window");
 
 const FormContainer = ({ children, title }) => {
     return (
         <ScrollView contentContainerStyle={styles.container}>
-            <Text style={styles.title}>{title}</Text>
+            <View style={styles.titleChip}>
+                <Text style={styles.title}>{title}</Text>
+            </View>
             {children}
         </ScrollView>
     );
@@ -19,14 +21,22 @@ const styles = StyleSheet.create({
         width: width,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "#f5f5f5",
+        backgroundColor: "#f8f5ff",
         paddingVertical: 20,
     },
+    titleChip: {
+        backgroundColor: "#ecfdf5",
+        borderWidth: 1,
+        borderColor: "#a7f3d0",
+        borderRadius: 999,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        marginBottom: 18,
+    },
     title: {
-        fontSize: 26,
-        fontWeight: "700",
-        color: "#1a1a1a",
-        marginBottom: 24,
+        fontSize: 24,
+        fontWeight: "800",
+        color: "#5b21b6",
     },
 });
 

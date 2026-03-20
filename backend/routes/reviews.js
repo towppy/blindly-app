@@ -33,7 +33,11 @@ router.get("/", authJwt, async (req, res) => {
     }
 
     const reviews = await Review.find({ isActive: { $ne: false } })
-      .populate("product", "name")
+      .populate({
+        path: "product",
+        select: "name category",
+        populate: { path: "category", select: "name" },
+      })
       .populate("user", "name email")
       .sort({ createdAt: -1 });
 

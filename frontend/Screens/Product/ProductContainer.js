@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useContext, useEffect } from "react";
+import React, { useState, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import {
     View,
     ScrollView,
@@ -9,6 +9,9 @@ import {
     StatusBar,
     Alert,
     FlatList,
+    Animated,
+    Easing,
+    ActivityIndicator,
 } from "react-native";
 import { Surface } from "react-native-paper";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
@@ -28,7 +31,8 @@ import { getJwt } from "../../assets/common/jwtStore";
 
 const { height, width } = Dimensions.get("window");
 
-const TAB_ITEMS = ["New", "Popular", "Limited"];
+const TAB_ITEMS = ["New", "Popular", "Limited", "Favorites"];
+const PAGE_SIZE = 8;
 
 const ProductContainer = () => {
     const context = useContext(AuthGlobal);
@@ -49,6 +53,11 @@ const ProductContainer = () => {
     const [vouchers, setVouchers] = useState([]);
     const [claimedVoucherIds, setClaimedVoucherIds] = useState(new Set());
     const [claimingVoucherId, setClaimingVoucherId] = useState(null);
+    const [favoriteIds, setFavoriteIds] = useState(new Set());
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+    const headerAnim = useRef(new Animated.Value(0)).current;
+
+    const pulseAnim = useRef(new Animated.Value(0)).current;
 
     const isAuthenticated = context?.stateUser?.isAuthenticated;
 
@@ -128,6 +137,59 @@ const ProductContainer = () => {
         }
     }, [products]);
 
+    useEffect(() => {
+        Animated.timing(headerAnim, {
+            toValue: 1,
+            duration: 520,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+        }).start();
+
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 0, duration: 1800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+            ])
+        ).start();
+    }, [headerAnim, pulseAnim]);
+
+    useEffect(() => {
+        setVisibleCount(PAGE_SIZE);
+    }, [productsCtg, keyword, focus, activeTab, priceRange]);
+
+    const displayedProducts = useMemo(() => {
+        if (focus) return productsFiltered;
+        return productsCtg.slice(0, visibleCount);
+    }, [focus, productsFiltered, productsCtg, visibleCount]);
+
+    const visibleVouchers = useMemo(() => {
+        if (!isAuthenticated) return vouchers;
+        return vouchers.filter((voucher) => {
+            const voucherId = String(voucher.id || voucher._id);
+            return !claimedVoucherIds.has(voucherId);
+        });
+    }, [vouchers, claimedVoucherIds, isAuthenticated]);
+
+    const hasMoreProducts = !focus && displayedProducts.length < productsCtg.length;
+
+    const loadMoreProducts = () => {
+        if (!hasMoreProducts) return;
+        setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, productsCtg.length));
+    };
+
+    const keyExtractor = useCallback((item) => String(item.id || item._id), []);
+
+    const renderProductItem = useCallback(
+        ({ item }) => (
+            <ProductList
+                item={item}
+                isFavorite={favoriteIds.has(String(item.id || item._id))}
+                onToggleFavorite={handleToggleFavorite}
+            />
+        ),
+        [favoriteIds, handleToggleFavorite]
+    );
+
     const changeCtg = (ctg) => {
         if (ctg === "all") {
             setProductsCtg(products);
@@ -153,6 +215,82 @@ const ProductContainer = () => {
         setProductsCtg(filtered);
     };
 
+    const loadFavorites = async () => {
+        if (!isAuthenticated) {
+            setFavoriteIds(new Set());
+            return;
+        }
+        try {
+            const token = await getJwt();
+            const res = await axios.get(`${baseURL}users/me/favorites`, {
+                headers: { Authorization: `Bearer ${token || ""}` },
+            });
+            setFavoriteIds(new Set((res.data?.favoriteIds || []).map(String)));
+        } catch (_err) {
+            setFavoriteIds(new Set());
+        }
+    };
+
+    const applyTabFilter = (tabIndex, sourceProducts = products) => {
+        const safeProducts = Array.isArray(sourceProducts) ? sourceProducts : [];
+        if (tabIndex === 1) {
+            const popular = [...safeProducts].sort(
+                (a, b) => Number(b.numReviews || b.rating || 0) - Number(a.numReviews || a.rating || 0)
+            );
+            setProductsCtg(popular);
+            return;
+        }
+        if (tabIndex === 2) {
+            const limited = safeProducts.filter((p) => p.hasActivePromo === true);
+            setProductsCtg(limited);
+            return;
+        }
+        if (tabIndex === 3) {
+            const favs = safeProducts.filter((p) => favoriteIds.has(String(p.id || p._id)));
+            setProductsCtg(favs);
+            return;
+        }
+        setProductsCtg(safeProducts);
+    };
+
+    const handleToggleFavorite = useCallback(async (product) => {
+        const productId = String(product.id || product._id || "");
+        if (!productId) return;
+        if (!isAuthenticated) {
+            Alert.alert("Login required", "Please login to add favorites.");
+            navigation.navigate("User", { screen: "Login" });
+            return;
+        }
+
+        const alreadyFavorite = favoriteIds.has(productId);
+        const previousIds = new Set(favoriteIds);
+        const next = new Set(favoriteIds);
+        if (alreadyFavorite) next.delete(productId);
+        else next.add(productId);
+        setFavoriteIds(next);
+
+        try {
+            const token = await getJwt();
+            if (alreadyFavorite) {
+                await axios.delete(`${baseURL}users/me/favorites/${productId}`, {
+                    headers: { Authorization: `Bearer ${token || ""}` },
+                });
+            } else {
+                await axios.post(
+                    `${baseURL}users/me/favorites/${productId}`,
+                    {},
+                    { headers: { Authorization: `Bearer ${token || ""}` } }
+                );
+            }
+            if (activeTab === 3) {
+                applyTabFilter(3, products);
+            }
+        } catch (_err) {
+            setFavoriteIds(previousIds);
+            Alert.alert("Favorite update failed", "Please try again.");
+        }
+    }, [isAuthenticated, navigation, favoriteIds, activeTab, products]);
+
     // FIX: Removed loadVouchers from dependency array and from cleanup.
     // Vouchers should NOT be cleared on screen blur — only re-fetched on focus.
     useFocusEffect(
@@ -165,6 +303,7 @@ const ProductContainer = () => {
                 .then((res) => setCategories(res.data))
                 .catch(() => console.log("Api categories call error"));
             loadVouchers();
+            loadFavorites();
 
             // FIX: Only reset UI state, not vouchers — vouchers are valid until refetched
             return () => {
@@ -175,12 +314,46 @@ const ProductContainer = () => {
         }, [dispatch, isAuthenticated]) // FIX: depend on isAuthenticated directly, not loadVouchers
     );
 
+    useEffect(() => {
+        if (!focus) {
+            applyTabFilter(activeTab, products);
+        }
+    }, [activeTab, products, favoriteIds, focus]);
+
     return (
         <Surface style={styles.surface}>
             <StatusBar barStyle="dark-content" backgroundColor="#faf9f7" />
+            <View pointerEvents="none" style={styles.bgDecorWrap}>
+                <Animated.View
+                    style={[
+                        styles.bgOrbPrimary,
+                        {
+                            transform: [
+                                {
+                                    scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }),
+                                },
+                            ],
+                        },
+                    ]}
+                />
+                <View style={styles.bgOrbMint} />
+                <View style={styles.bgOrbSoft} />
+            </View>
 
             {/* Header */}
-            <View style={styles.header}>
+            <Animated.View
+                style={[
+                    styles.header,
+                    {
+                        opacity: headerAnim,
+                        transform: [
+                            {
+                                translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }),
+                            },
+                        ],
+                    },
+                ]}
+            >
                 <View>
                     <Text style={styles.welcomeText}>Get surprised with Blindly! Shop now!</Text>
                     <Text style={{ color: "#9b8ec4", fontSize: 12, fontWeight: "600", marginTop: 2 }}>
@@ -193,7 +366,7 @@ const ProductContainer = () => {
                 >
                     <Ionicons name="person-outline" size={22} color="#3d2c8d" />
                 </TouchableOpacity>
-            </View>
+            </Animated.View>
 
             {/* Tabs */}
             <View style={styles.tabRow}>
@@ -201,7 +374,10 @@ const ProductContainer = () => {
                     <TouchableOpacity
                         key={tab}
                         style={[styles.tab, activeTab === idx && styles.tabActive]}
-                        onPress={() => setActiveTab(idx)}
+                        onPress={() => {
+                            setActiveTab(idx);
+                            applyTabFilter(idx, products);
+                        }}
                     >
                         <Text style={[styles.tabText, activeTab === idx && styles.tabTextActive]}>
                             {tab}
@@ -288,14 +464,22 @@ const ProductContainer = () => {
                 <SearchedProduct productsFiltered={productsFiltered} />
             ) : (
                 <FlatList
-                    data={productsCtg}
-                    keyExtractor={(item) => String(item.id || item._id)}
+                    data={displayedProducts}
+                    keyExtractor={keyExtractor}
                     numColumns={2}
                     columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 10 }}
                     contentContainerStyle={{ paddingBottom: 30, paddingTop: 4 }}
-                    renderItem={({ item }) => (
-                        <ProductList item={item} />
-                    )}
+                    onEndReached={loadMoreProducts}
+                    onEndReachedThreshold={0.3}
+                    renderItem={renderProductItem}
+                    ListFooterComponent={
+                        hasMoreProducts ? (
+                            <View style={styles.loadingMoreWrap}>
+                                <ActivityIndicator color="#7c3aed" size="small" />
+                                <Text style={styles.loadingMoreText}>Loading more products...</Text>
+                            </View>
+                        ) : <View style={{ height: 8 }} />
+                    }
                     ListEmptyComponent={
                         <View style={[styles.center, { height: height / 2 }]}>
                             <Ionicons name="cube-outline" size={48} color="#c4b8e8" />
@@ -325,7 +509,7 @@ const ProductContainer = () => {
                             </TouchableOpacity>
 
                             {/* Vouchers */}
-                            {vouchers.length > 0 && (
+                            {visibleVouchers.length > 0 && (
                                 <View style={{ marginHorizontal: 14, marginBottom: 14 }}>
                                     <View style={styles.sectionHeader}>
                                         <Text style={styles.sectionTitle}>Vouchers / Discounts</Text>
@@ -337,7 +521,7 @@ const ProductContainer = () => {
                                         snapToInterval={width * 0.58 + 10}
                                         contentContainerStyle={{ paddingRight: 14 }}
                                     >
-                                        {vouchers.map((voucher) => {
+                                        {visibleVouchers.map((voucher) => {
                                             const voucherId = String(voucher.id || voucher._id);
                                             const alreadyClaimed = claimedVoucherIds.has(voucherId);
                                             const appliesText = voucher.appliesTo === "category"

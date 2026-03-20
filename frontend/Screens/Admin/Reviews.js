@@ -3,6 +3,7 @@ import {
     View,
     Text,
     FlatList,
+    ScrollView,
     StyleSheet,
     ActivityIndicator,
     RefreshControl,
@@ -47,6 +48,7 @@ const Reviews = () => {
     const [token, setToken] = useState("");
     const [search, setSearch] = useState("");
     const [ratingFilter, setRatingFilter] = useState("all");
+    const [categoryFilter, setCategoryFilter] = useState("all");
     const [deleteModal, setDeleteModal] = useState({ visible: false, reviewId: null });
     const [deleteReason, setDeleteReason] = useState(DELETE_REASONS[0]);
 
@@ -96,8 +98,21 @@ const Reviews = () => {
         const text = `${r.product?.name || ""} ${r.user?.name || ""} ${r.user?.email || ""} ${r.comment || ""}`.toLowerCase();
         const queryOk = !search.trim() || text.includes(search.toLowerCase());
         const ratingOk = ratingFilter === "all" || String(r.rating) === ratingFilter;
-        return queryOk && ratingOk;
+        const categoryName = r.product?.category?.name || "Uncategorized";
+        const categoryOk = categoryFilter === "all" || categoryName === categoryFilter;
+        return queryOk && ratingOk && categoryOk;
     });
+
+    const categoryOptions = [
+        "all",
+        ...Array.from(
+            new Set(
+                reviews
+                    .map((r) => r.product?.category?.name)
+                    .filter(Boolean)
+            )
+        ),
+    ];
 
     if (loading) {
         return (
@@ -126,6 +141,16 @@ const Reviews = () => {
                         <Picker.Item label="1 star" value="1" />
                     </Picker>
                 </View>
+                <View style={styles.ratingPickerWrap}>
+                    <Picker selectedValue={categoryFilter} onValueChange={setCategoryFilter}>
+                        <Picker.Item label="All categories" value="all" />
+                        {categoryOptions
+                            .filter((c) => c !== "all")
+                            .map((category) => (
+                                <Picker.Item key={category} label={category} value={category} />
+                            ))}
+                    </Picker>
+                </View>
             </View>
 
             <FlatList
@@ -142,31 +167,37 @@ const Reviews = () => {
                 </View>
             }
             renderItem={({ item }) => (
-                <View style={styles.card}>
-                    <View style={styles.cardHeader}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.productName} numberOfLines={1}>
-                                {item.product?.name || "Unknown product"}
-                            </Text>
-                            <Text style={styles.userName}>
-                                by {item.user?.name || item.user?.email || "Unknown user"}
-                            </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableScroll}>
+                    <View style={styles.tableCard}>
+                        <View style={styles.tableHeaderRow}>
+                            <Text style={[styles.tableHeaderCell, styles.wProduct]}>Product</Text>
+                            <Text style={[styles.tableHeaderCell, styles.wCategory]}>Category</Text>
+                            <Text style={[styles.tableHeaderCell, styles.wUser]}>User</Text>
+                            <Text style={[styles.tableHeaderCell, styles.wRating]}>Rating</Text>
+                            <Text style={[styles.tableHeaderCell, styles.wComment]}>Comment</Text>
+                            <Text style={[styles.tableHeaderCell, styles.wDate]}>Date</Text>
+                            <Text style={[styles.tableHeaderCell, styles.wAction]}>Action</Text>
                         </View>
-                        <TouchableOpacity
-                            onPress={() => openDeleteModal(item.id || item._id)}
-                            style={styles.deleteBtn}
-                        >
-                            <Ionicons name="trash-outline" size={18} color="#E74C3C" />
-                        </TouchableOpacity>
+                        <View style={styles.tableDataRow}>
+                            <Text style={[styles.tableCell, styles.wProduct]} numberOfLines={2}>{item.product?.name || "Unknown product"}</Text>
+                            <Text style={[styles.tableCell, styles.wCategory]} numberOfLines={2}>{item.product?.category?.name || "Uncategorized"}</Text>
+                            <Text style={[styles.tableCell, styles.wUser]} numberOfLines={2}>{item.user?.name || item.user?.email || "Unknown user"}</Text>
+                            <View style={[styles.tableCell, styles.wRating]}>
+                                <Stars rating={item.rating} />
+                            </View>
+                            <Text style={[styles.tableCell, styles.wComment]} numberOfLines={3}>{item.comment || "-"}</Text>
+                            <Text style={[styles.tableCell, styles.wDate]}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ""}</Text>
+                            <View style={[styles.tableCell, styles.wAction]}>
+                                <TouchableOpacity
+                                    onPress={() => openDeleteModal(item.id || item._id)}
+                                    style={styles.deleteBtn}
+                                >
+                                    <Ionicons name="trash-outline" size={18} color="#E74C3C" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
                     </View>
-                    <Stars rating={item.rating} />
-                    {item.comment ? (
-                        <Text style={styles.comment}>{item.comment}</Text>
-                    ) : null}
-                    <Text style={styles.date}>
-                        {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ""}
-                    </Text>
-                </View>
+                </ScrollView>
             )}
         />
 
@@ -216,10 +247,47 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         overflow: "hidden",
     },
-    card:        { backgroundColor: "#fff", borderRadius: 10, padding: 14, marginBottom: 10, elevation: 2 },
-    cardHeader:  { flexDirection: "row", alignItems: "flex-start", marginBottom: 6 },
-    productName: { fontSize: 14, fontWeight: "700", color: "#1a0a3c" },
-    userName:    { fontSize: 12, color: "#666", marginTop: 1 },
+    tableScroll: { marginBottom: 10 },
+    tableCard: {
+        backgroundColor: "#fff",
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: "#ece7f8",
+        overflow: "hidden",
+        minWidth: 920,
+    },
+    tableHeaderRow: {
+        flexDirection: "row",
+        backgroundColor: "#f5f1ff",
+        borderBottomWidth: 1,
+        borderBottomColor: "#ece7f8",
+    },
+    tableHeaderCell: {
+        fontWeight: "800",
+        color: "#5b21b6",
+        fontSize: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 8,
+    },
+    tableDataRow: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    tableCell: {
+        color: "#333",
+        fontSize: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 8,
+        borderRightWidth: 1,
+        borderRightColor: "#f1edf9",
+    },
+    wProduct: { width: 170 },
+    wCategory: { width: 140 },
+    wUser: { width: 180 },
+    wRating: { width: 100 },
+    wComment: { width: 220 },
+    wDate: { width: 90 },
+    wAction: { width: 80, alignItems: "center", justifyContent: "center" },
     deleteBtn:   { padding: 4 },
     comment:     { fontSize: 13, color: "#444", marginTop: 6 },
     date:        { fontSize: 11, color: "#aaa", marginTop: 6 },

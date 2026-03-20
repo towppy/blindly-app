@@ -18,15 +18,30 @@ export const COLORS = {
 };
 
 const styles = StyleSheet.create({
+    formCard: {
+        width: "90%",
+        backgroundColor: "#ffffff",
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: "#e9d5ff",
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+        marginBottom: 6,
+        shadowColor: "#7c3aed",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.14,
+        shadowRadius: 14,
+        elevation: 4,
+    },
     // Avatar
     imageContainer: {
         width: 110,
         height: 110,
         borderRadius: 55,
         borderWidth: 3,
-        borderColor: COLORS.primarySoft,
+        borderColor: "#a7f3d0",
         borderStyle: "dashed",
-        backgroundColor: COLORS.primaryLight,
+        backgroundColor: "#ecfdf5",
         justifyContent: "center",
         alignItems: "center",
         marginBottom: 20,
@@ -97,7 +112,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: COLORS.primary,
+        backgroundColor: "#6d28d9",
         borderRadius: 14,
         paddingVertical: 14,
         width: "88%",
@@ -144,12 +159,12 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: COLORS.card,
+        backgroundColor: "#ecfdf5",
         borderRadius: 14,
         paddingVertical: 13,
         width: "88%",
         borderWidth: 1.5,
-        borderColor: COLORS.primarySoft,
+        borderColor: "#a7f3d0",
         gap: 8,
         shadowColor: COLORS.primaryDeep,
         shadowOffset: { width: 0, height: 2 },
@@ -163,7 +178,7 @@ const styles = StyleSheet.create({
     googleBtnText: {
         color: COLORS.textDark,
         fontSize: 15,
-        fontWeight: "700",
+        fontWeight: "800",
     },
 });
 

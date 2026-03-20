@@ -30,6 +30,15 @@ export const loginUser = (user, dispatch, reduxDispatch) => {
         .then((res) => {
             if (res.status === 403) {
                 return res.json().then((data) => {
+                    if (data?.code === "EMAIL_NOT_VERIFIED") {
+                        Toast.show({
+                            topOffset: 60,
+                            type: "error",
+                            text1: "Email not verified",
+                            text2: "Please verify your email first.",
+                        });
+                        return;
+                    }
                     Toast.show({
                         topOffset: 60,
                         type: "error",
@@ -123,4 +132,15 @@ export const setCurrentUser = (decoded, user) => {
         payload: decoded,
         userProfile: user,
     };
+};
+
+export const resendVerificationEmail = async (email) => {
+    return fetch(`${baseURL}users/resend-verification`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+        },
+    }).then((res) => res.json());
 };

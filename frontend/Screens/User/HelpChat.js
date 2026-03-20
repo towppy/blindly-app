@@ -18,11 +18,15 @@ import { getJwt } from "../../assets/common/jwtStore";
 function buildLocalFallback(input) {
     const text = String(input || "").toLowerCase();
 
+    if (text.includes("how") || text.includes("feature") || text.includes("system") || text.includes("blindly")) {
+        return "Blindly supports product browsing, limited-time promos, claimable vouchers, checkout/payment, email verification before first login, and order tracking in My Orders. Ask about any step and I can guide you.";
+    }
+
     if (text.includes("order") || text.includes("track")) {
         return "I can help with order tracking. Open My Orders, select your latest order, then check the status timeline and details. If it looks delayed, share the order ID.";
     }
     if (text.includes("voucher") || text.includes("discount") || text.includes("promo")) {
-        return "Claim vouchers on Home, then apply eligible claimed vouchers during Checkout. Check expiry and category rules if it does not apply.";
+        return "Vouchers are coupons to claim on Home and apply at checkout, while promos are limited-time product discounts already reflected on product/home prices. Check expiry and eligibility rules when discount does not apply.";
     }
     if (text.includes("payment") || text.includes("pay") || text.includes("checkout")) {
         return "At checkout, confirm full delivery details, choose payment method, then place the order. If payment fails, retry on stable internet and avoid duplicate orders.";
@@ -30,8 +34,8 @@ function buildLocalFallback(input) {
     if (text.includes("cancel") || text.includes("refund") || text.includes("return")) {
         return "Cancellation or refund depends on current order status. Open order details in My Orders to check available actions.";
     }
-    if (text.includes("login") || text.includes("account") || text.includes("password")) {
-        return "For account and app settings, go to User Profile. You can update delivery details, phone, password, and other account settings there.";
+    if (text.includes("login") || text.includes("account") || text.includes("password") || text.includes("verify")) {
+        return "Before first login, verify your email using the verification link or Verify Email screen. For account settings, go to User Profile to update delivery details, phone, password, and profile data.";
     }
 
     return "I am focused on order and system support: orders, vouchers, checkout, payments, account/profile, and app notification issues. Ask with details so I can give exact steps.";
@@ -40,8 +44,10 @@ function buildLocalFallback(input) {
 const QUICK_PROMPTS = [
     "Track my latest order",
     "Voucher is not applying",
+    "How do promos work?",
+    "How do I verify my email?",
     "Update my delivery details",
-    "Payment failed at checkout",
+    "Payment failed at checkout"
 ];
 
 function getLocalSuggestions(input) {
@@ -56,8 +62,17 @@ function getLocalSuggestions(input) {
     if (text.includes("voucher") || text.includes("discount") || text.includes("promo")) {
         return [
             "Where can I claim vouchers?",
+            "How do promos apply to product prices?",
+            "What is the difference between voucher and promo?",
             "Do vouchers expire?",
-            "Why is voucher not eligible?",
+            "Why is voucher not eligible?"
+        ];
+    }
+    if (text.includes("verify") || text.includes("email") || text.includes("login")) {
+        return [
+            "How do I verify my account email?",
+            "Can I resend verification email?",
+            "Why is login blocked by verification?",
         ];
     }
     if (text.includes("payment") || text.includes("checkout")) {
@@ -78,7 +93,7 @@ const HelpChat = () => {
         {
             id: "welcome",
             from: "bot",
-            text: "Hello. I am Blindly Support Chatbot for order and system concerns. I can help with order tracking, checkout, vouchers, payment, account/profile, and app notification issues.",
+            text: "Hello. I am Blindly Support Chatbot. I can help with system usage, order tracking, checkout, vouchers, promos, payment, email verification, account/profile, and app notification issues.",
             source: "support",
         },
     ]);

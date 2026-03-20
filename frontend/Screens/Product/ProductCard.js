@@ -22,7 +22,7 @@ const FLOAT_OFFSET = IMAGE_SIZE * 0.45; // how much image pokes above card
 const FALLBACK_IMAGE = "https://cdn.pixabay.com/photo/2012/04/01/17/29/box-23649_960_720.png";
 
 const ProductCard = (props) => {
-    const { name, price, image, countInStock } = props;
+    const { name, price, image, countInStock, effectivePrice, hasActivePromo, promo, isFavorite, onToggleFavorite } = props;
     const dispatch = useDispatch();
     const navigation = useNavigation();
     const context = useContext(AuthGlobal);
@@ -32,6 +32,9 @@ const ProductCard = (props) => {
     const outOfStock = countInStock <= 0;
     const showAddButton = !outOfStock && !isAdmin && isAuthenticated;
     const showGhostButton = !outOfStock && (!isAuthenticated || isAdmin);
+    const originalPrice = Number(price || 0);
+    const discountedPrice = Number(effectivePrice || price || 0);
+    const promoActive = hasActivePromo === true && Number.isFinite(discountedPrice) && discountedPrice < originalPrice;
 
     const handleAddToCart = () => {
         if (!isAuthenticated) {
@@ -53,7 +56,17 @@ const ProductCard = (props) => {
             });
             return;
         }
-        dispatch(addToCart({ ...props, quantity: 1 }, context.stateUser.user?.email));
+        dispatch(
+            addToCart(
+                {
+                    ...props,
+                    quantity: 1,
+                    originalPrice,
+                    price: promoActive ? discountedPrice : originalPrice,
+                },
+                context.stateUser.user?.email
+            )
+        );
         Toast.show({
             topOffset: 60,
             type: "success",
@@ -77,6 +90,19 @@ const ProductCard = (props) => {
 
             {/* Card body starts directly below the bottom half of the image */}
             <View style={[styles.card, { marginTop: -(FLOAT_OFFSET) }]}>
+                {!isAdmin && (
+                    <TouchableOpacity
+                        style={styles.favoriteBtn}
+                        onPress={() => onToggleFavorite && onToggleFavorite(props)}
+                        activeOpacity={0.82}
+                    >
+                        <Ionicons
+                            name={isFavorite ? "star" : "star-outline"}
+                            size={16}
+                            color={isFavorite ? "#f59e0b" : "#7c3aed"}
+                        />
+                    </TouchableOpacity>
+                )}
 
                 {/* Out of stock ribbon */}
                 {outOfStock && (
@@ -89,7 +115,20 @@ const ProductCard = (props) => {
                 <View style={{ height: FLOAT_OFFSET + 4 }} />
 
                 <Text style={styles.title} numberOfLines={1}>{displayName}</Text>
-                <Text style={styles.price}>₱{Number(price).toFixed(2)}</Text>
+                {promoActive ? (
+                    <>
+                        <View style={styles.priceRow}>
+                            <Text style={styles.promoPrice}>₱{discountedPrice.toFixed(2)}</Text>
+                            <Text style={styles.originalPrice}>₱{originalPrice.toFixed(2)}</Text>
+                            {!!promo?.name && <Text style={styles.promoNameTag}>{promo.name}</Text>}
+                        </View>
+                        <Text style={styles.endsText} numberOfLines={1}>
+                            Ends in: {promo?.endsAt ? new Date(promo.endsAt).toLocaleDateString() : "-"}
+                        </Text>
+                    </>
+                ) : (
+                    <Text style={styles.price}>₱{originalPrice.toFixed(2)}</Text>
+                )}
 
                 {showAddButton && (
                     <TouchableOpacity
@@ -159,6 +198,20 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         paddingVertical: 3,
     },
+    favoriteBtn: {
+        position: "absolute",
+        top: 10,
+        left: 8,
+        zIndex: 5,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: "#ffffff",
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: "#e9d5ff",
+    },
     outOfStockText: {
         fontSize: 10,
         fontWeight: "700",
@@ -181,6 +234,38 @@ const styles = StyleSheet.create({
         color: "#7c3aed",
         marginBottom: 10,
         letterSpacing: -0.3,
+    },
+    priceRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 2,
+    },
+    promoPrice: {
+        fontSize: 17,
+        fontWeight: "800",
+        color: "#e91e63",
+        letterSpacing: -0.3,
+    },
+    originalPrice: {
+        fontSize: 12,
+        color: "#8b7bb9",
+        textDecorationLine: "line-through",
+    },
+    promoNameTag: {
+        fontSize: 10,
+        color: "#0f766e",
+        backgroundColor: "#d1fae5",
+        borderRadius: 10,
+        paddingHorizontal: 7,
+        paddingVertical: 2,
+        fontWeight: "700",
+    },
+    endsText: {
+        fontSize: 11,
+        color: "#7c3aed",
+        fontWeight: "600",
+        marginBottom: 8,
     },
 
     // ── Add button (authenticated) ────────────────────────────────────────────

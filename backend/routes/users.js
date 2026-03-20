@@ -1,10 +1,12 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 const config = require("../config");
 const authJwt = require("../middleware/authJwt");
 const User = require("../models/User");
+const Product = require("../models/Product");
 const upload = require("../helpers/upload");
 
 
@@ -18,12 +20,146 @@ const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const nodemailer = require('nodemailer');
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
-  port: process.env.MAIL_PORT,
+  port: Number(process.env.MAIL_PORT || 2525),
+  secure: Number(process.env.MAIL_PORT || 2525) === 465,
   auth: {
     user: process.env.MAIL_USERNAME,
     pass: process.env.MAIL_PASSWORD,
   },
 });
+
+const EMAIL_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@blindly.com';
+
+function emailShell({ title, subtitle, bodyHtml, accent = "#7c3aed" }) {
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
+      <body style="margin:0;padding:20px;background:#f5f3ff;font-family:Arial,sans-serif;color:#1f1235;">
+        <table cellpadding="0" cellspacing="0" width="100%" style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #ece8ff;border-radius:16px;overflow:hidden;">
+          <tr>
+            <td style="padding:22px 24px;background:linear-gradient(135deg,#6d28d9,#8b5cf6);color:#fff;">
+              <div style="font-size:22px;font-weight:800;letter-spacing:.2px;">Blindly</div>
+              <div style="font-size:13px;opacity:.9;margin-top:4px;">see the beauty within</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px;">
+              <div style="font-size:24px;font-weight:800;color:${accent};margin-bottom:6px;">${title}</div>
+              <div style="font-size:14px;color:#6b5d95;margin-bottom:16px;">${subtitle}</div>
+              ${bodyHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:14px 24px;background:#f0fdf4;border-top:1px solid #d1fae5;color:#0f766e;font-size:12px;">
+              This is an automated Blindly email.
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+}
+
+function hashVerificationToken(rawToken) {
+  return crypto.createHash("sha256").update(String(rawToken)).digest("hex");
+}
+
+function buildVerificationUrl(rawToken) {
+  return `${config.publicApiBaseUrl}/users/verify-email?token=${encodeURIComponent(rawToken)}`;
+}
+
+async function sendVerificationEmail(user, rawToken) {
+  const verificationUrl = buildVerificationUrl(rawToken);
+  const bodyHtml = `
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#2a1b4f;">Hi ${user.name || "there"}, verify your email to activate your Blindly account.</p>
+    <p style="margin:0 0 16px;">
+      <a href="${verificationUrl}" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;padding:11px 16px;border-radius:10px;font-weight:700;">Verify Email</a>
+    </p>
+    <p style="margin:0 0 10px;font-size:13px;color:#6b5d95;">If the button does not work, copy this link:</p>
+    <p style="margin:0;padding:10px;border-radius:8px;background:#f5f3ff;color:#5b21b6;font-size:12px;word-break:break-all;">${verificationUrl}</p>
+    <p style="margin:14px 0 0;font-size:12px;color:#7e72a8;">This link expires in 24 hours.</p>
+  `;
+  const mailOptions = {
+    from: MAIL_FROM,
+    to: user.email,
+    subject: "Verify your Blindly account",
+    text: `Hi ${user.name},\n\nPlease verify your email by opening this link:\n${verificationUrl}\n\nThis link will expire in 24 hours.`,
+    html: emailShell({
+      title: "Verify your email",
+      subtitle: "One step left before you can log in.",
+      bodyHtml,
+      accent: "#7c3aed",
+    }),
+  };
+
+  await transporter.sendMail(mailOptions);
+}
+
+async function sendAccountStatusEmail({ user, action, reason }) {
+  const safeReason = reason || "No reason provided";
+  const isDelete = action === "delete";
+  const subject = isDelete
+    ? "Your Blindly account has been deleted"
+    : "Your Blindly account has been deactivated";
+
+  const bodyHtml = `
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#2a1b4f;">Hi ${user.name || "there"},</p>
+    <p style="margin:0 0 12px;font-size:15px;color:#2a1b4f;">
+      Your account has been ${isDelete ? "deleted" : "deactivated"} by an administrator.
+    </p>
+    <div style="border:1px solid #e9d5ff;background:#faf5ff;border-radius:12px;padding:12px;">
+      <div style="font-size:12px;color:#7c3aed;font-weight:700;text-transform:uppercase;letter-spacing:.4px;">Reason</div>
+      <div style="margin-top:6px;font-size:14px;color:#3b2c63;">${safeReason}</div>
+    </div>
+    <p style="margin:14px 0 0;font-size:13px;color:#6b5d95;">If you think this is a mistake, contact support.</p>
+  `;
+
+  await transporter.sendMail({
+    from: MAIL_FROM,
+    to: user.email,
+    subject,
+    text: `Hi ${user.name || "there"},\n\nYour Blindly account has been ${isDelete ? "deleted" : "deactivated"}.\nReason: ${safeReason}\n\nIf you think this is a mistake, contact support.`,
+    html: emailShell({
+      title: isDelete ? "Account deleted" : "Account deactivated",
+      subtitle: "We are sharing this update for your records.",
+      bodyHtml,
+      accent: isDelete ? "#ef4444" : "#f97316",
+    }),
+  });
+}
+
+async function verifyEmailToken(rawToken) {
+  const tokenHash = hashVerificationToken(rawToken);
+  const user = await User.findOne({
+    emailVerificationTokenHash: tokenHash,
+    emailVerificationExpiresAt: { $gt: new Date() },
+  });
+
+  if (!user) {
+    return { ok: false, reason: "invalid_or_expired" };
+  }
+
+  user.isEmailVerified = true;
+  user.emailVerificationTokenHash = null;
+  user.emailVerificationExpiresAt = null;
+  user.emailVerifiedAt = new Date();
+  await user.save();
+
+  if (user.firebaseUid) {
+    try {
+      await firebaseAdmin.auth().updateUser(user.firebaseUid, { emailVerified: true });
+    } catch (_err) {
+      // Ignore Firebase sync failures so local verification still succeeds.
+    }
+  }
+
+  return { ok: true, user };
+}
 
 function toBoolean(value) {
   if (typeof value === "boolean") return value;
@@ -76,6 +212,9 @@ router.post("/register", upload.single("image"), async (req, res) => {
     const passwordHash = await bcrypt.hash(String(password), 10);
     const image = req.file ? req.file.path : "";
 
+    const rawVerificationToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = hashVerificationToken(rawVerificationToken);
+
     // Save user in MongoDB, including Firebase UID
     const user = await User.create({
       name: String(name).trim(),
@@ -85,26 +224,23 @@ router.post("/register", upload.single("image"), async (req, res) => {
       image,
       isAdmin,
       firebaseUid: firebaseUser.uid,
+      isEmailVerified: false,
+      emailVerificationTokenHash: tokenHash,
+      emailVerificationExpiresAt: new Date(Date.now() + EMAIL_TOKEN_TTL_MS),
     });
 
-    // Send welcome email
-    const mailOptions = {
-      from: 'noreply@blindly.com',
-      to: user.email,
-      subject: 'Welcome to Blindly!',
-      text: `Hi ${user.name},\n\nThank you for registering at Blindly!`,
-    };
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error('Email send error:', error);
-      } else {
-        console.log('Email sent:', info.response);
-      }
-    });
+    try {
+      await sendVerificationEmail(user, rawVerificationToken);
+    } catch (mailError) {
+      console.error('[Register] Verification email send error:', mailError.message);
+      return res.status(500).json({ message: "User created but failed to send verification email. Please try again." });
+    }
 
     return res.status(201).json({
       success: true,
-      user: user.toJSON(),
+      message: "Registration successful. Please verify your email before logging in.",
+      requiresEmailVerification: true,
+      email: user.email,
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to register user" });
@@ -145,6 +281,14 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    if (user.isEmailVerified === false) {
+      return res.status(403).json({
+        message: "Please verify your email before logging in.",
+        code: "EMAIL_NOT_VERIFIED",
+        email: user.email,
+      });
+    }
+
     if (user.isActive === false) {
       return res.status(403).json({ message: "Your account has been deactivated. Please contact support." });
     }
@@ -163,6 +307,90 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.post("/verify-email", async (req, res) => {
+  try {
+    const token = String(req.body?.token || "").trim();
+    if (!token) {
+      return res.status(400).json({ message: "Verification token is required" });
+    }
+
+    const result = await verifyEmailToken(token);
+    if (!result.ok) {
+      return res.status(400).json({ message: "Verification link is invalid or expired" });
+    }
+
+    return res.status(200).json({ success: true, message: "Email verified successfully" });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to verify email" });
+  }
+});
+
+router.get("/verify-email", async (req, res) => {
+  try {
+    const token = String(req.query?.token || "").trim();
+    if (!token) {
+      return res.status(400).send(emailShell({
+        title: "Missing token",
+        subtitle: "Open the full verification link from your email.",
+        bodyHtml: "<p style=\"margin:0;font-size:14px;color:#6b5d95;\">Please request a new verification email from the app if needed.</p>",
+        accent: "#ef4444",
+      }));
+    }
+
+    const result = await verifyEmailToken(token);
+    if (!result.ok) {
+      return res.status(400).send(emailShell({
+        title: "Link expired or invalid",
+        subtitle: "Your verification link can only be used once and expires after 24 hours.",
+        bodyHtml: "<p style=\"margin:0;font-size:14px;color:#6b5d95;\">Please return to the app and tap Resend verification email.</p>",
+        accent: "#ef4444",
+      }));
+    }
+
+    return res.status(200).send(emailShell({
+      title: "Email verified",
+      subtitle: "Your Blindly account is ready.",
+      bodyHtml: "<p style=\"margin:0;font-size:14px;color:#2a1b4f;\">You can now return to the app and log in.</p>",
+      accent: "#16a34a",
+    }));
+  } catch (_err) {
+    return res.status(500).send(emailShell({
+      title: "Verification failed",
+      subtitle: "Please try again shortly.",
+      bodyHtml: "<p style=\"margin:0;font-size:14px;color:#6b5d95;\">If this keeps happening, request a new verification email in the app.</p>",
+      accent: "#ef4444",
+    }));
+  }
+});
+
+router.post("/resend-verification", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(200).json({ success: true, message: "If that account exists, a verification email has been sent." });
+    }
+
+    if (user.isEmailVerified === true) {
+      return res.status(200).json({ success: true, message: "Email is already verified." });
+    }
+
+    const rawVerificationToken = crypto.randomBytes(32).toString("hex");
+    user.emailVerificationTokenHash = hashVerificationToken(rawVerificationToken);
+    user.emailVerificationExpiresAt = new Date(Date.now() + EMAIL_TOKEN_TTL_MS);
+    await user.save();
+
+    await sendVerificationEmail(user, rawVerificationToken);
+    return res.status(200).json({ success: true, message: "Verification email sent." });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to resend verification email" });
+  }
+});
+
 router.put("/profile", authJwt, async (req, res) => {
   try {
     const allowedFields = [
@@ -170,6 +398,7 @@ router.put("/profile", authJwt, async (req, res) => {
       "phone",
       "deliveryAddress1",
       "deliveryAddress2",
+      "deliveryRegion",
       "deliveryCity",
       "deliveryZip",
       "deliveryCountry",
@@ -198,6 +427,9 @@ router.put("/profile", authJwt, async (req, res) => {
     if (typeof updates.deliveryCity === "string") {
       updates.deliveryCity = updates.deliveryCity.trim();
     }
+    if (typeof updates.deliveryRegion === "string") {
+      updates.deliveryRegion = updates.deliveryRegion.trim();
+    }
     if (typeof updates.deliveryZip === "string") {
       updates.deliveryZip = updates.deliveryZip.trim();
     }
@@ -225,6 +457,70 @@ router.put("/profile", authJwt, async (req, res) => {
     return res.status(200).json(user.toJSON());
   } catch (_error) {
     return res.status(500).json({ message: "Failed to update profile" });
+  }
+});
+
+// GET /users/me/favorites — authenticated user favorite products
+router.get("/me/favorites", authJwt, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId)
+      .populate("favoriteProducts", "name image price isActive")
+      .select("favoriteProducts");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const favorites = (user.favoriteProducts || []).filter((p) => p && p.isActive !== false);
+    const favoriteIds = favorites.map((p) => String(p._id));
+
+    return res.status(200).json({
+      favoriteIds,
+      favorites,
+    });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to load favorites" });
+  }
+});
+
+// POST /users/me/favorites/:productId — add product to favorites
+router.post("/me/favorites/:productId", authJwt, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    if (!productId || !/^[0-9a-fA-F]{24}$/.test(String(productId))) {
+      return res.status(400).json({ message: "Valid productId is required" });
+    }
+
+    const product = await Product.findById(productId).select("_id isActive");
+    if (!product || product.isActive === false) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    await User.findByIdAndUpdate(req.user.userId, {
+      $addToSet: { favoriteProducts: product._id },
+    });
+
+    return res.status(200).json({ success: true, productId: String(product._id), isFavorite: true });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to add favorite" });
+  }
+});
+
+// DELETE /users/me/favorites/:productId — remove product from favorites
+router.delete("/me/favorites/:productId", authJwt, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    if (!productId || !/^[0-9a-fA-F]{24}$/.test(String(productId))) {
+      return res.status(400).json({ message: "Valid productId is required" });
+    }
+
+    await User.findByIdAndUpdate(req.user.userId, {
+      $pull: { favoriteProducts: productId },
+    });
+
+    return res.status(200).json({ success: true, productId: String(productId), isFavorite: false });
+  } catch (_err) {
+    return res.status(500).json({ message: "Failed to remove favorite" });
   }
 });
 
@@ -323,103 +619,11 @@ router.patch("/:id/deactivate", authJwt, async (req, res) => {
     const reason = req.body?.reason || '';
     const user = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
     if (!user) return res.status(404).json({ message: "User not found" });
-
-    // Send styled deactivation email
-  console.log('[Deactivate] Sending deactivation email to:', user.email, '| Reason:', reason);
-
-const mailOptions = {
-  from: '"Blindly" <noreply@blindly.com>',
-  to: user.email,
-  subject: 'Your Blindly account has been deactivated',
-  html: `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-    </head>
-    <body style="margin: 0; padding: 20px; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 8px;">
-        <tr>
-          <td style="padding: 30px; background: #7c3aed; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Blindly</h1>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 30px;">
-            <p style="margin: 0 0 20px 0; font-size: 16px; color: #333;">Hi ${user.name || 'there'},</p>
-            
-            <p style="margin: 0 0 20px 0; font-size: 16px; color: #333;">
-              Your Blindly account has been deactivated.
-            </p>
-            
-            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f3f3; border-radius: 5px; margin: 20px 0;">
-              <tr>
-                <td style="padding: 15px;">
-                  <p style="margin: 0 0 5px 0; font-size: 14px; color: #666;">Reason for deactivation:</p>
-                  <p style="margin: 0; font-size: 16px; color: #333; font-weight: bold;">${reason || 'No reason provided'}</p>
-                </td>
-              </tr>
-            </table>
-            
-            <p style="margin: 20px 0 0 0; font-size: 14px; color: #666;">
-              If you have questions, please contact support.
-            </p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 20px 30px; background-color: #f9f9f9; border-radius: 0 0 8px 8px; text-align: center; border-top: 1px solid #eee;">
-            <p style="margin: 0; font-size: 12px; color: #999;">© 2024 Blindly. All rights reserved.</p>
-          </td>
-        </tr>
-      </table>
-    </body>
-    </html>
-  `,
-  text: `
-    Hi ${user.name || 'there'},
-    
-    Your Blindly account has been deactivated.
-    
-    Reason: ${reason || 'No reason provided'}
-    
-    If you have questions, please contact support.
-    
-    - Blindly Team
-  `
-};
-
-
-// Send the email
-transporter.sendMail(mailOptions, (error, info) => {
-  if (error) {
-    console.error('💔 Email send error:', error);
-    console.error('[Deactivate] Failed to send email to:', user.email);
-    
-    // Log to your error tracking
-    console.error({
-      event: 'DEACTIVATION_EMAIL_FAILED',
-      userId: user._id,
-      email: user.email,
-      reason: reason,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  } else {
-    console.log('💜 Deactivation email sent successfully!', {
-      response: info.response,
-      messageId: info.messageId,
-      to: user.email,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error('[Deactivate] Email send error:', error);
-      } else {
-        console.log('[Deactivate] Deactivation email sent:', info.response);
-      }
-    });
+    try {
+      await sendAccountStatusEmail({ user, action: "deactivate", reason });
+    } catch (mailErr) {
+      console.error("[Deactivate] Email send error:", mailErr.message);
+    }
     return res.status(200).json({ success: true, isActive: false });
   } catch (_err) {
     return res.status(500).json({ message: "Failed to deactivate user" });
@@ -445,42 +649,11 @@ router.delete("/:id", authJwt, async (req, res) => {
     const reason = req.body?.reason || '';
     const user = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
     if (!user) return res.status(404).json({ message: "User not found" });
-    // Send styled deactivation email
-    console.log('[Delete] Preparing to send deactivation email...');
-    console.log('[Delete] User:', user.email, '| Name:', user.name, '| Reason:', reason);
-    const mailOptions = {
-      from: '"🌸 Blindly Care Team" <hello@blindly.com>',
-      to: user.email,
-      subject: '💜 Your Blindly Account Has Been Deactivated',
-      html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Account Deactivation</title><style>body{font-family:'Segoe UI','Helvetica Neue','Apple Color Emoji','Segoe UI Emoji',sans-serif;line-height:1.6;margin:0;padding:0;background-color:#faf5ff;}.container{max-width:560px;margin:30px auto;background-color:#ffffff;border-radius:32px;overflow:hidden;box-shadow:0 10px 30px rgba(124,58,237,0.15);border:2px solid #f3e8ff;}.header{background:linear-gradient(145deg,#f3e8ff,#ffffff);padding:40px 30px 30px;text-align:center;border-bottom:3px dashed #d8b4fe;}.header-icon{font-size:48px;margin-bottom:15px;background-color:#f3e8ff;width:80px;height:80px;line-height:80px;border-radius:40px;display:inline-block;box-shadow:0 4px 10px rgba(124,58,237,0.2);}.header h1{color:#5b21b6;font-size:28px;font-weight:700;margin:10px 0 5px;letter-spacing:-0.5px;}.header-subtitle{color:#7c3aed;font-size:16px;font-weight:400;opacity:0.9;}.content{padding:30px;background-color:#ffffff;}.greeting{font-size:18px;color:#2d1b4e;font-weight:600;margin-bottom:15px;}.greeting span{background-color:#f3e8ff;padding:5px 12px;border-radius:50px;font-size:24px;margin-right:8px;}.reason-box{background-color:#faf5ff;border-radius:24px;padding:20px;margin:25px 0;border:2px solid #e9d5ff;position:relative;}.reason-box:before{content:"📋";position:absolute;top:-12px;left:20px;background:white;padding:0 10px;font-size:20px;}.reason-label{font-size:14px;color:#7c3aed;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px;}.reason-text{font-size:18px;color:#2d1b4e;font-weight:500;padding-left:10px;border-left:4px solid #d8b4fe;}.info-card{background-color:#ffffff;border-radius:20px;padding:20px;margin:20px 0;border:2px solid #f3e8ff;}.info-title{color:#5b21b6;font-size:16px;font-weight:700;margin-bottom:15px;display:flex;align-items:center;gap:8px;}.info-title span{font-size:20px;}.info-text{color:#4a3a6b;font-size:15px;margin-bottom:12px;padding-left:15px;border-left:2px solid #e9d5ff;}.button-container{text-align:center;margin:35px 0 20px;}.button{background:linear-gradient(145deg,#7c3aed,#5b21b6);color:#ffffff;padding:16px 40px;border-radius:50px;text-decoration:none;font-weight:600;font-size:16px;display:inline-block;box-shadow:0 6px 15px rgba(124,58,237,0.4);border:2px solid #f3e8ff;}.button:hover{background:linear-gradient(145deg,#8b5cf6,#6d28d9);}.note{background-color:#fff9f0;border-radius:20px;padding:20px;margin:25px 0;border:2px dashed #fcd34d;}.note-title{color:#b45309;font-weight:600;margin-bottom:10px;font-size:16px;}.note-text{color:#92400e;font-size:14px;}.footer{background-color:#faf5ff;padding:25px 30px;text-align:center;border-top:3px solid #e9d5ff;}.footer-text{color:#7c3aed;font-size:14px;margin:5px 0;}.footer-icon{font-size:24px;margin:10px 0;}.social-links{margin-top:15px;}.social-links a{display:inline-block;margin:0 8px;color:#7c3aed;text-decoration:none;font-size:20px;}hr{border:none;border-top:2px dotted #e9d5ff;margin:20px 0;}</style></head><body><div class="container"><div class="header"><div class="header-icon">💜</div><h1>Blindly</h1><div class="header-subtitle">see the beauty within</div></div><div class="content"><div class="greeting"><span>✨</span> Hi ${user.name || 'there'}!</div><p style="color: #4a3a6b; font-size: 16px;">We're reaching out to let you know about a change to your Blindly account.</p><div class="reason-box"><div class="reason-label">💜 Deactivation Reason</div><div class="reason-text">${reason || 'Account deactivated by administrator'}</div></div><div class="info-card"><div class="info-title"><span>🔍</span> What this means:</div><div class="info-text">• You can no longer log into your account</div><div class="info-text">• Your listings and activity are hidden</div><div class="info-text">• Your data is safely stored (for now)</div></div><div class="note"><div class="note-title">🌟 Think this is a mistake?</div><div class="note-text">We're here to help! Our support team is just a message away. Click the button below to appeal this decision.</div></div><div class="button-container"><a href="https://blindly.com/support/appeal?user=${user._id}" class="button">💬 Contact Support</a></div><hr><div style="text-align: center; margin: 20px 0;"><p style="color: #7c3aed; font-size: 15px; font-weight: 500;">Want to give Blindly another try?</p><p style="color: #4a3a6b; font-size: 14px;">You can create a new account anytime at<br><a href="https://blindly.com/signup" style="color: #7c3aed; text-decoration: underline; font-weight: 600;">blindly.com/signup</a></p></div></div><div class="footer"><div class="footer-icon">💜✨🦋</div><div class="footer-text">Blindly - where connections bloom</div><div class="footer-text" style="font-size: 12px;">123 Purple Lane, Imagination City, PC 12345</div><div class="social-links"><a href="#">📱</a><a href="#">💬</a><a href="#">📷</a><a href="#">🐦</a></div><hr style="margin: 15px 0;"><div class="footer-text" style="font-size: 11px; opacity: 0.7;">This email was sent to ${user.email}<br>© 2024 Blindly. All rights reserved. Made with 💜</div></div></div></body></html>`,
-      text: `
-        Hi ${user.name || 'there'},
-
-        Your Blindly account has been deactivated.
-
-        Reason: ${reason || 'Account deactivated by administrator'}
-
-        What this means:
-        - You can no longer log into your account
-        - Your listings and activity are hidden
-        - Your data is safely stored
-
-        If you think this is a mistake, please contact our support team:
-        https://blindly.com/support/appeal?user=${user._id}
-
-        Want to give Blindly another try? Create a new account at:
-        https://blindly.com/signup
-
-        💜 Blindly Team
-      `,
-    };
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error('[Delete] Email send error:', error);
-      } else {
-        console.log('[Delete] Deactivation email sent:', info.response);
-      }
-    });
+    try {
+      await sendAccountStatusEmail({ user, action: "delete", reason });
+    } catch (mailErr) {
+      console.error("[Delete] Email send error:", mailErr.message);
+    }
     return res.status(200).json({ success: true });
   } catch (_err) {
     return res.status(500).json({ message: "Failed to delete user" });
@@ -491,8 +664,11 @@ router.delete("/:id", authJwt, async (req, res) => {
 router.put("/change-password", authJwt, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ message: "currentPassword and newPassword are required" });
+    if (!newPassword) {
+      return res.status(400).json({ message: "newPassword is required" });
+    }
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ message: "New password must be at least 6 characters" });
     }
 
     const user = await User.findById(req.user.userId);
@@ -500,15 +676,21 @@ router.put("/change-password", authJwt, async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const matches = await bcrypt.compare(String(currentPassword), user.passwordHash);
-    if (!matches) {
-      return res.status(400).json({ message: "Current password is incorrect" });
+    const hasPassword = Boolean(user.passwordHash);
+    if (hasPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({ message: "currentPassword is required" });
+      }
+      const matches = await bcrypt.compare(String(currentPassword), user.passwordHash);
+      if (!matches) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
     }
 
     user.passwordHash = await bcrypt.hash(String(newPassword), 10);
     await user.save();
 
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, mode: hasPassword ? "changed" : "added" });
   } catch (_err) {
     return res.status(500).json({ message: "Failed to change password" });
   }
@@ -574,9 +756,11 @@ router.delete("/me", authJwt, async (req, res) => {
     user.passwordHash = await bcrypt.hash(`${suffix}-deleted`, 10);
     user.deliveryAddress1 = "";
     user.deliveryAddress2 = "";
+    user.deliveryRegion = "";
     user.deliveryCity = "";
     user.deliveryZip = "";
     user.deliveryCountry = "";
+    user.favoriteProducts = [];
     user.deliveryLocation = { latitude: null, longitude: null };
     user.pushTokens = [];
     user.isActive = false;
@@ -717,14 +901,26 @@ router.post('/google-login', async (req, res) => {
         image: picture || '',
         isAdmin: false,
         firebaseUid: firebaseUser ? firebaseUser.uid : undefined,
+        isEmailVerified: true,
+        emailVerifiedAt: new Date(),
       });
     } else if (!user.firebaseUid) {
       // Link to Firebase if not already linked
       try {
         firebaseUser = await firebaseAdmin.auth().getUserByEmail(normalizedEmail);
         user.firebaseUid = firebaseUser.uid;
+        user.isEmailVerified = true;
+        user.emailVerifiedAt = user.emailVerifiedAt || new Date();
+        user.emailVerificationTokenHash = null;
+        user.emailVerificationExpiresAt = null;
         await user.save();
       } catch (e) {}
+    } else if (user.isEmailVerified !== true) {
+      user.isEmailVerified = true;
+      user.emailVerifiedAt = user.emailVerifiedAt || new Date();
+      user.emailVerificationTokenHash = null;
+      user.emailVerificationExpiresAt = null;
+      await user.save();
     }
 
     // Issue JWT

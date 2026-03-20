@@ -2,11 +2,13 @@ import { useNavigation } from "@react-navigation/native";
 import React, { useContext, useState } from "react";
 import { Drawer } from "react-native-paper";
 import AuthGlobal from "../Context/Store/AuthGlobal";
+import { ThemeContext } from "../Context/Store/Theme";
 
 const DrawerContent = () => {
     const [active, setActive] = useState("");
     const navigation = useNavigation();
     const context = useContext(AuthGlobal);
+    const { isDark, toggleMode } = useContext(ThemeContext);
     const isAdmin = context?.stateUser?.user?.isAdmin === true;
 
     const onClick = (screen) => {
@@ -40,12 +42,6 @@ const DrawerContent = () => {
                 />
             ) : null}
             <Drawer.Item
-                label="Recents"
-                active={active === "Recents"}
-                onPress={() => onClick("Recents")}
-                icon="history"
-            />
-            <Drawer.Item
                 label="Notifications"
                 active={active === "Notifications"}
                 onPress={() => {
@@ -53,6 +49,11 @@ const DrawerContent = () => {
                     navigation.navigate("User", { screen: "Notifications" });
                 }}
                 icon="bell"
+            />
+            <Drawer.Item
+                label={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                onPress={toggleMode}
+                icon={isDark ? "weather-sunny" : "weather-night"}
             />
         </Drawer.Section>
     );

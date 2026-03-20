@@ -1,5 +1,5 @@
 import React, { useContext, useState, useCallback } from "react";
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Image, Modal } from "react-native";
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Image, Modal, TextInput } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { Picker } from "@react-native-picker/picker";
 import { getJwt } from "../../assets/common/jwtStore";
@@ -13,6 +13,7 @@ import AddressMapPicker from "../../Shared/AddressMapPicker";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import styles, { COLORS } from "../../Shared/User/UserProfile.styles";
+import countries from "../../assets/data/countries.json";
 
 const ACCOUNT_ACTION_REASONS = [
     "Privacy concerns",
@@ -23,6 +24,14 @@ const ACCOUNT_ACTION_REASONS = [
     "Other",
 ];
 
+const REGION_CITY_OPTIONS = {
+    "Metro Manila": ["Manila", "Quezon City", "Makati", "Pasig", "Taguig", "Mandaluyong"],
+    "CALABARZON": ["Antipolo", "Calamba", "Bacoor", "Dasmarinas", "Lipa"],
+    "Central Luzon": ["Angeles", "San Fernando", "Olongapo", "Malolos", "Tarlac City"],
+    "Central Visayas": ["Cebu City", "Mandaue", "Lapu-Lapu", "Tagbilaran", "Dumaguete"],
+    "Davao Region": ["Davao City", "Tagum", "Digos", "Panabo", "Mati"],
+};
+
 const UserProfile = () => {
     const context = useContext(AuthGlobal);
     const [userProfile, setUserProfile] = useState("");
@@ -30,6 +39,7 @@ const UserProfile = () => {
     const [phone, setPhone] = useState("");
     const [deliveryAddress1, setDeliveryAddress1] = useState("");
     const [deliveryAddress2, setDeliveryAddress2] = useState("");
+    const [deliveryRegion, setDeliveryRegion] = useState("");
     const [deliveryCity, setDeliveryCity] = useState("");
     const [deliveryZip, setDeliveryZip] = useState("");
     const [deliveryCountry, setDeliveryCountry] = useState("Philippines");
@@ -49,10 +59,14 @@ const UserProfile = () => {
     const [showAccountActionModal, setShowAccountActionModal] = useState(false);
     const [showReasonModal, setShowReasonModal] = useState(false);
     const [pendingAccountAction, setPendingAccountAction] = useState("");
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [isEditingPhone, setIsEditingPhone] = useState(false);
+    const [isEditingAddress, setIsEditingAddress] = useState(false);
 
     const requiredProfileFields = {
         phone:            String(phone || "").trim(),
         deliveryAddress1: String(deliveryAddress1 || "").trim(),
+        deliveryRegion:   String(deliveryRegion || "").trim(),
         deliveryCity:     String(deliveryCity || "").trim(),
         deliveryZip:      String(deliveryZip || "").trim(),
         deliveryCountry:  String(deliveryCountry || "").trim(),
@@ -61,6 +75,7 @@ const UserProfile = () => {
         .filter(([, v]) => !v)
         .map(([k]) => k);
     const isCheckoutReady = missingRequiredFields.length === 0;
+    const hasPassword = userProfile?.hasPassword !== false;
 
     const hydrateProfileForm = (profile) => {
         setUserProfile(profile);
@@ -69,6 +84,7 @@ const UserProfile = () => {
         setImage(profile?.image || "");
         setDeliveryAddress1(profile?.deliveryAddress1 || "");
         setDeliveryAddress2(profile?.deliveryAddress2 || "");
+        setDeliveryRegion(profile?.deliveryRegion || "");
         setDeliveryCity(profile?.deliveryCity || "");
         setDeliveryZip(profile?.deliveryZip || "");
         setDeliveryCountry(profile?.deliveryCountry || "Philippines");
@@ -114,6 +130,9 @@ const UserProfile = () => {
         setDeliveryCity(picked.city || "");
         setDeliveryZip(picked.zip || "");
         setDeliveryCountry(picked.country || "Philippines");
+        if (!deliveryRegion) {
+            setDeliveryRegion("Metro Manila");
+        }
         Toast.show({ topOffset: 60, type: "success", text1: "Location selected", text2: "Review details, then tap Save Profile" });
     };
 
@@ -180,13 +199,16 @@ const UserProfile = () => {
             if (!jwt) { Toast.show({ topOffset: 60, type: "error", text1: "Session expired", text2: "Please login again" }); return; }
             const payload = {
                 name, phone, deliveryAddress1, deliveryAddress2,
-                deliveryCity, deliveryZip, deliveryCountry,
+                deliveryRegion, deliveryCity, deliveryZip, deliveryCountry,
                 ...(deliveryLocation ? { deliveryLocation } : {}),
             };
             const response = await axios.put(`${baseURL}users/profile`, payload, {
                 headers: { Authorization: `Bearer ${jwt}` },
             });
             hydrateProfileForm(response.data);
+            setIsEditingName(false);
+            setIsEditingPhone(false);
+            setIsEditingAddress(false);
             Toast.show({ topOffset: 60, type: "success", text1: "Profile updated" });
         } catch {
             Toast.show({ topOffset: 60, type: "error", text1: "Failed to save profile" });
@@ -196,7 +218,7 @@ const UserProfile = () => {
     };
 
     const changePassword = async () => {
-        if (!currentPassword || !newPassword || !confirmPassword) {
+        if (!newPassword || !confirmPassword || (hasPassword && !currentPassword)) {
             Toast.show({ topOffset: 60, type: "error", text1: "Please fill in all password fields" });
             return;
         }
@@ -207,12 +229,20 @@ const UserProfile = () => {
         try {
             setIsChangingPassword(true);
             const jwt = await getJwt();
+            const payload = hasPassword
+                ? { currentPassword, newPassword }
+                : { newPassword };
             await axios.put(
                 `${baseURL}users/change-password`,
-                { currentPassword, newPassword },
+                payload,
                 { headers: { Authorization: `Bearer ${jwt}` } }
             );
-            Toast.show({ topOffset: 60, type: "success", text1: "Password changed successfully" });
+            Toast.show({
+                topOffset: 60,
+                type: "success",
+                text1: hasPassword ? "Password changed successfully" : "Password added successfully",
+            });
+            setUserProfile((prev) => ({ ...(prev || {}), hasPassword: true }));
             setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
             setShowChangePassword(false);
         } catch (err) {
@@ -271,6 +301,9 @@ const UserProfile = () => {
         performAccountAction(pendingAccountAction);
     };
 
+    const regions = Object.keys(REGION_CITY_OPTIONS);
+    const cityOptions = REGION_CITY_OPTIONS[deliveryRegion] || [];
+
     return (
         <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.subContainer}>
@@ -291,7 +324,28 @@ const UserProfile = () => {
                 </TouchableOpacity>
 
                 {/* ── Name + badges ── */}
-                <Text style={styles.nameText}>{userProfile?.name || ""}</Text>
+                <View style={styles.inlineEditRow}>
+                    {isEditingName ? (
+                        <View style={styles.inlineNameInputWrap}>
+                            <TextInput
+                                style={styles.inlineNameInput}
+                                value={name}
+                                onChangeText={setName}
+                                placeholder="Your name"
+                                placeholderTextColor={COLORS.textSubtle}
+                            />
+                        </View>
+                    ) : (
+                        <Text style={styles.nameText}>{name || userProfile?.name || ""}</Text>
+                    )}
+                    <TouchableOpacity
+                        style={styles.inlineEditBtn}
+                        onPress={() => setIsEditingName((v) => !v)}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons name={isEditingName ? "checkmark" : "pencil"} size={16} color={COLORS.primary} />
+                    </TouchableOpacity>
+                </View>
 
                 {userProfile?.isAdmin && (
                     <View style={styles.adminBadge}>
@@ -312,18 +366,107 @@ const UserProfile = () => {
                 <View style={styles.formBlock}>
                     <Text style={styles.sectionHeader}>Account Info</Text>
                     <Text style={styles.emailText}>{userProfile?.email || ""}</Text>
-                    <Input label="Name"  placeholder="Your name"         value={name}  onChangeText={setName} />
-                    <Input label="Phone" placeholder="Your phone number" value={phone} keyboardType="numeric" onChangeText={setPhone} />
+                    <View style={styles.fieldHeaderRow}>
+                        <Text style={styles.fieldHeaderLabel}>Phone Number</Text>
+                        <TouchableOpacity onPress={() => setIsEditingPhone((v) => !v)}>
+                            <Ionicons name="pencil" size={15} color={COLORS.primary} />
+                        </TouchableOpacity>
+                    </View>
+                    <Input
+                        label=""
+                        placeholder="Your phone number"
+                        value={phone}
+                        keyboardType="numeric"
+                        onChangeText={setPhone}
+                        editable={isEditingPhone}
+                    />
 
                     {/* ── Delivery address ── */}
-                    <Text style={styles.sectionHeader}>Delivery Address</Text>
-                    <Input label="Address Line 1"          placeholder="Street, building, etc." value={deliveryAddress1} onChangeText={setDeliveryAddress1} />
-                    <Input label="Address Line 2 (optional)" placeholder="Unit, floor, etc."   value={deliveryAddress2} onChangeText={setDeliveryAddress2} />
-                    <Input label="City"     placeholder="City or municipality" value={deliveryCity}    onChangeText={setDeliveryCity} />
-                    <Input label="Zip Code" placeholder="Postal/Zip code"      value={deliveryZip}     keyboardType="numeric" onChangeText={setDeliveryZip} />
-                    <Input label="Country"  placeholder="Country"              value={deliveryCountry} onChangeText={setDeliveryCountry} />
+                    <View style={styles.fieldHeaderRowTop}>
+                        <Text style={styles.sectionHeaderNoMargin}>Delivery Address</Text>
+                        <TouchableOpacity onPress={() => setIsEditingAddress((v) => !v)}>
+                            <Ionicons name="pencil" size={15} color={COLORS.primary} />
+                        </TouchableOpacity>
+                    </View>
+                    <View style={[styles.selectWrap, !isEditingAddress && styles.selectDisabled]}>
+                        <Text style={styles.selectLabel}>Country</Text>
+                        <Picker
+                            enabled={isEditingAddress}
+                            style={styles.selectPicker}
+                            dropdownIconColor={COLORS.textDark}
+                            selectedValue={deliveryCountry}
+                            onValueChange={(value) => setDeliveryCountry(value)}
+                        >
+                            {countries.map((country) => (
+                                <Picker.Item key={country.code} label={country.name} value={country.name} />
+                            ))}
+                        </Picker>
+                    </View>
+                    <View style={[styles.selectWrap, !isEditingAddress && styles.selectDisabled]}>
+                        <Text style={styles.selectLabel}>Region</Text>
+                        <Picker
+                            enabled={isEditingAddress}
+                            style={styles.selectPicker}
+                            dropdownIconColor={COLORS.textDark}
+                            selectedValue={deliveryRegion}
+                            onValueChange={(value) => {
+                                setDeliveryRegion(value);
+                                const nextCities = REGION_CITY_OPTIONS[value] || [];
+                                if (!nextCities.includes(deliveryCity)) {
+                                    setDeliveryCity(nextCities[0] || "");
+                                }
+                            }}
+                        >
+                            <Picker.Item label="Select region" value="" />
+                            {regions.map((region) => (
+                                <Picker.Item key={region} label={region} value={region} />
+                            ))}
+                        </Picker>
+                    </View>
+                    <View style={[styles.selectWrap, !isEditingAddress && styles.selectDisabled]}>
+                        <Text style={styles.selectLabel}>City</Text>
+                        <Picker
+                            enabled={isEditingAddress}
+                            style={styles.selectPicker}
+                            dropdownIconColor={COLORS.textDark}
+                            selectedValue={deliveryCity}
+                            onValueChange={(value) => setDeliveryCity(value)}
+                        >
+                            <Picker.Item label="Select city" value="" />
+                            {cityOptions.map((city) => (
+                                <Picker.Item key={city} label={city} value={city} />
+                            ))}
+                        </Picker>
+                    </View>
+                    <Input
+                        label="Address Line 1"
+                        placeholder="Street, building, etc."
+                        value={deliveryAddress1}
+                        onChangeText={setDeliveryAddress1}
+                        editable={isEditingAddress}
+                    />
+                    <Input
+                        label="Address Line 2 (optional)"
+                        placeholder="Unit, floor, etc."
+                        value={deliveryAddress2}
+                        onChangeText={setDeliveryAddress2}
+                        editable={isEditingAddress}
+                    />
+                    <Input
+                        label="Zip Code"
+                        placeholder="Postal/Zip code"
+                        value={deliveryZip}
+                        keyboardType="numeric"
+                        onChangeText={setDeliveryZip}
+                        editable={isEditingAddress}
+                    />
 
-                    <TouchableOpacity style={styles.mapButton} onPress={() => setMapVisible(true)} activeOpacity={0.8}>
+                    <TouchableOpacity
+                        style={[styles.mapButton, !isEditingAddress && styles.mapButtonDisabled]}
+                        onPress={() => setMapVisible(true)}
+                        activeOpacity={0.8}
+                        disabled={!isEditingAddress}
+                    >
                         <Ionicons name="location-outline" size={16} color={COLORS.primary} />
                         <Text style={styles.mapButtonText}>Set Address from Map</Text>
                     </TouchableOpacity>
@@ -340,42 +483,6 @@ const UserProfile = () => {
                         </TouchableOpacity>
                     </View>
                 </View>
-
-                {/* ── Change password ── */}
-                <TouchableOpacity
-                    style={styles.changePasswordToggle}
-                    onPress={() => {
-                        setShowChangePassword((v) => !v);
-                        setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
-                    }}
-                    activeOpacity={0.8}
-                >
-                    <Ionicons name={showChangePassword ? "close-outline" : "lock-closed-outline"} size={16} color={COLORS.primary} />
-                    <Text style={styles.changePasswordToggleText}>
-                        {showChangePassword ? "Cancel" : "Change Password"}
-                    </Text>
-                </TouchableOpacity>
-
-                {showChangePassword && (
-                    <View style={styles.changePasswordBlock}>
-                        <Input label="Current Password"    placeholder="Enter current password" value={currentPassword} secureTextEntry showToggle onChangeText={setCurrentPassword} />
-                        <Input label="New Password"        placeholder="Enter new password"      value={newPassword}     secureTextEntry showToggle onChangeText={setNewPassword} />
-                        <Input label="Confirm New Password" placeholder="Re-enter new password" value={confirmPassword}  secureTextEntry showToggle onChangeText={setConfirmPassword} />
-                        <View style={styles.updatePasswordWrapper}>
-                            <TouchableOpacity
-                                style={[styles.updatePasswordBtn, isChangingPassword && styles.updatePasswordBtnDisabled]}
-                                onPress={changePassword}
-                                disabled={isChangingPassword}
-                                activeOpacity={0.85}
-                            >
-                                <Ionicons name="shield-checkmark-outline" size={17} color={COLORS.white} style={{ marginRight: 8 }} />
-                                <Text style={styles.updatePasswordBtnText}>
-                                    {isChangingPassword ? "Updating…" : "Update Password"}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
 
                 <TouchableOpacity
                     style={[styles.accountActionTriggerBtn, isAccountActionLoading && styles.accountActionBtnDisabled]}
@@ -418,6 +525,62 @@ const UserProfile = () => {
                         <Text style={styles.modalSubtitle}>Choose what you want to do with your account.</Text>
 
                         <TouchableOpacity
+                            style={styles.modalPasswordBtn}
+                            onPress={() => {
+                                setShowChangePassword((v) => !v);
+                                setCurrentPassword("");
+                                setNewPassword("");
+                                setConfirmPassword("");
+                            }}
+                            activeOpacity={0.85}
+                        >
+                            <Ionicons name={showChangePassword ? "close-outline" : "lock-closed-outline"} size={18} color={COLORS.primary} style={{ marginRight: 8 }} />
+                            <Text style={styles.modalPasswordText}>{showChangePassword ? "Cancel" : (hasPassword ? "Change Password" : "Add Password")}</Text>
+                        </TouchableOpacity>
+
+                        {showChangePassword && (
+                            <View style={styles.modalPasswordBlock}>
+                                {hasPassword && (
+                                    <Input
+                                        label="Current Password"
+                                        placeholder="Enter current password"
+                                        value={currentPassword}
+                                        secureTextEntry
+                                        showToggle
+                                        onChangeText={setCurrentPassword}
+                                    />
+                                )}
+                                <Input
+                                    label="New Password"
+                                    placeholder={hasPassword ? "Enter new password" : "Create a password"}
+                                    value={newPassword}
+                                    secureTextEntry
+                                    showToggle
+                                    onChangeText={setNewPassword}
+                                />
+                                <Input
+                                    label="Confirm New Password"
+                                    placeholder="Re-enter password"
+                                    value={confirmPassword}
+                                    secureTextEntry
+                                    showToggle
+                                    onChangeText={setConfirmPassword}
+                                />
+                                <TouchableOpacity
+                                    style={[styles.modalSavePasswordBtn, isChangingPassword && styles.updatePasswordBtnDisabled]}
+                                    onPress={changePassword}
+                                    disabled={isChangingPassword}
+                                    activeOpacity={0.85}
+                                >
+                                    <Ionicons name="shield-checkmark-outline" size={17} color={COLORS.white} style={{ marginRight: 8 }} />
+                                    <Text style={styles.modalSavePasswordText}>
+                                        {isChangingPassword ? "Saving..." : (hasPassword ? "Update Password" : "Add Password")}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
+                        <TouchableOpacity
                             style={styles.modalDeactivateBtn}
                             onPress={() => openReasonModalForAction("deactivate")}
                             activeOpacity={0.85}
@@ -437,7 +600,10 @@ const UserProfile = () => {
 
                         <TouchableOpacity
                             style={styles.modalCancelBtn}
-                            onPress={() => setShowAccountActionModal(false)}
+                            onPress={() => {
+                                setShowAccountActionModal(false);
+                                setShowChangePassword(false);
+                            }}
                             activeOpacity={0.8}
                         >
                             <Text style={styles.modalCancelText}>Cancel</Text>

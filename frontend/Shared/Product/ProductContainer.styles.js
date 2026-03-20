@@ -5,7 +5,43 @@ const { width } = Dimensions.get("window");
 const styles = StyleSheet.create({
     surface: {
         flex: 1,
-        backgroundColor: "#faf9f7",
+        backgroundColor: "#f8f5ff",
+    },
+    bgDecorWrap: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 220,
+        overflow: "hidden",
+    },
+    bgOrbPrimary: {
+        position: "absolute",
+        width: 220,
+        height: 220,
+        borderRadius: 110,
+        backgroundColor: "#e9ddff",
+        top: -82,
+        right: -44,
+    },
+    bgOrbMint: {
+        position: "absolute",
+        width: 170,
+        height: 170,
+        borderRadius: 85,
+        backgroundColor: "#d1fae5",
+        top: -40,
+        left: -26,
+        opacity: 0.8,
+    },
+    bgOrbSoft: {
+        position: "absolute",
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: "#f0ecfb",
+        top: 70,
+        right: width * 0.35,
     },
 
     // Header
@@ -16,7 +52,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 16,
         paddingBottom: 8,
-        backgroundColor: "#faf9f7",
+        backgroundColor: "transparent",
     },
     welcomeText: {
         fontSize: 26,
@@ -45,9 +81,12 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderRadius: 20,
         backgroundColor: "#f0ecfb",
+        borderWidth: 1,
+        borderColor: "#ddd6fe",
     },
     tabActive: {
         backgroundColor: "#7c3aed",
+        borderColor: "#7c3aed",
     },
     tabText: {
         fontSize: 14,
@@ -70,10 +109,12 @@ const styles = StyleSheet.create({
         flex: 1,
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#f0ecfb",
+        backgroundColor: "#fff",
         borderRadius: 14,
         paddingHorizontal: 14,
         height: 46,
+        borderWidth: 1,
+        borderColor: "#ddd6fe",
     },
     searchIcon: {
         marginRight: 8,
@@ -91,6 +132,11 @@ const styles = StyleSheet.create({
         backgroundColor: "#7c3aed",
         alignItems: "center",
         justifyContent: "center",
+        shadowColor: "#7c3aed",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 3,
     },
 
     // Price Filter
@@ -168,11 +214,13 @@ const styles = StyleSheet.create({
     helpBanner: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#7c3aed",
+        backgroundColor: "#6d28d9",
         borderRadius: 16,
         marginHorizontal: 20,
         marginBottom: 18,
         padding: 18,
+        borderWidth: 1,
+        borderColor: "#c4b5fd",
     },
     helpTitle: {
         fontSize: 20,
@@ -189,7 +237,7 @@ const styles = StyleSheet.create({
         width: 52,
         height: 52,
         borderRadius: 14,
-        backgroundColor: "#fff",
+        backgroundColor: "#ecfdf5",
         alignItems: "center",
         justifyContent: "center",
     },
@@ -226,6 +274,17 @@ listContainer: {
         color: "#b0a3d4",
         fontSize: 15,
         fontWeight: "600",
+    },
+    loadingMoreWrap: {
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 14,
+        gap: 6,
+    },
+    loadingMoreText: {
+        color: "#7c6aaa",
+        fontSize: 12,
+        fontWeight: "700",
     },
 
     // MultiSlider

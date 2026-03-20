@@ -92,6 +92,35 @@ const styles = StyleSheet.create({
         letterSpacing: -0.5,
         marginBottom: 2,
     },
+    inlineEditRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    inlineEditBtn: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: COLORS.primaryLight,
+        borderWidth: 1,
+        borderColor: COLORS.primarySoft,
+    },
+    inlineNameInputWrap: {
+        borderWidth: 1.5,
+        borderColor: COLORS.primarySoft,
+        borderRadius: 12,
+        backgroundColor: COLORS.white,
+        minWidth: 190,
+    },
+    inlineNameInput: {
+        height: 44,
+        paddingHorizontal: 12,
+        color: COLORS.textDark,
+        fontSize: 18,
+        fontWeight: "700",
+    },
 
     // ── Badges ────────────────────────────────────────────────────────────────
     adminBadge: {
@@ -178,6 +207,56 @@ const styles = StyleSheet.create({
         marginTop: 10,
         marginBottom: 4,
     },
+    fieldHeaderRow: {
+        width: "88%",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 6,
+    },
+    fieldHeaderRowTop: {
+        width: "88%",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginTop: 10,
+        marginBottom: 8,
+    },
+    fieldHeaderLabel: {
+        color: COLORS.textMuted,
+        fontSize: 13,
+        fontWeight: "700",
+    },
+    sectionHeaderNoMargin: {
+        fontSize: 11,
+        fontWeight: "800",
+        color: COLORS.textSubtle,
+        textTransform: "uppercase",
+        letterSpacing: 1.4,
+    },
+    selectWrap: {
+        width: "88%",
+        borderWidth: 1.5,
+        borderColor: COLORS.primarySoft,
+        borderRadius: 12,
+        backgroundColor: COLORS.white,
+        marginBottom: 12,
+        overflow: "hidden",
+    },
+    selectDisabled: {
+        opacity: 0.55,
+    },
+    selectLabel: {
+        color: COLORS.textMuted,
+        fontSize: 12,
+        fontWeight: "700",
+        paddingHorizontal: 12,
+        paddingTop: 10,
+    },
+    selectPicker: {
+        color: COLORS.textDark,
+        backgroundColor: COLORS.white,
+    },
     saveBtn: {
         flexDirection: "row",
         alignItems: "center",
@@ -220,6 +299,9 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
         fontWeight: "700",
         fontSize: 14,
+    },
+    mapButtonDisabled: {
+        opacity: 0.5,
     },
 
     // ── Change password toggle ────────────────────────────────────────────────
@@ -362,6 +444,40 @@ const styles = StyleSheet.create({
         fontSize: 13,
         marginTop: 5,
         marginBottom: 12,
+    },
+    modalPasswordBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#ecfdf5",
+        borderWidth: 1,
+        borderColor: "#a7f3d0",
+        borderRadius: 12,
+        paddingVertical: 12,
+        marginBottom: 10,
+    },
+    modalPasswordText: {
+        color: COLORS.primary,
+        fontWeight: "800",
+        fontSize: 14,
+    },
+    modalPasswordBlock: {
+        marginBottom: 10,
+    },
+    modalSavePasswordBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: COLORS.primaryDeep,
+        borderRadius: 12,
+        paddingVertical: 12,
+        marginTop: 4,
+        marginBottom: 8,
+    },
+    modalSavePasswordText: {
+        color: COLORS.white,
+        fontWeight: "800",
+        fontSize: 14,
     },
     modalDeactivateBtn: {
         flexDirection: "row",

@@ -11,6 +11,7 @@ phone: { type: String, required: false, default: '', trim: true },
     isAdmin: { type: Boolean, default: false },
     deliveryAddress1: { type: String, default: "" },
     deliveryAddress2: { type: String, default: "" },
+    deliveryRegion: { type: String, default: "" },
     deliveryCity: { type: String, default: "" },
     deliveryZip: { type: String, default: "" },
     deliveryCountry: { type: String, default: "Philippines" },
@@ -24,7 +25,12 @@ phone: { type: String, required: false, default: '', trim: true },
         type: { type: String, enum: ["fcm", "expo", "unknown"], default: "unknown" },
       },
     ],
+    favoriteProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
     isActive: { type: Boolean, default: true },
+    isEmailVerified: { type: Boolean, default: false },
+    emailVerificationTokenHash: { type: String, default: null },
+    emailVerificationExpiresAt: { type: Date, default: null },
+    emailVerifiedAt: { type: Date, default: null },
     accountStatus: { type: String, enum: ["active", "deactivated", "deleted"], default: "active" },
     accountStatusReason: { type: String, default: "" },
     accountStatusUpdatedAt: { type: Date, default: null },
@@ -41,6 +47,7 @@ userSchema.set("toJSON", {
   virtuals: true,
   versionKey: false,
   transform: (_doc, ret) => {
+    ret.hasPassword = Boolean(ret.passwordHash);
     delete ret._id;
     delete ret.passwordHash;
     delete ret.pushTokens;
