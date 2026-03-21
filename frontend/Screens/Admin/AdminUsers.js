@@ -3,6 +3,7 @@ import {
     View,
     Text,
     FlatList,
+    ScrollView,
     ActivityIndicator,
     StyleSheet,
     RefreshControl,
@@ -10,6 +11,7 @@ import {
     TouchableOpacity,
     Modal,
     TouchableWithoutFeedback,
+    TextInput,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Searchbar, RadioButton } from "react-native-paper";
@@ -28,6 +30,15 @@ const DEACTIVATION_REASONS = [
     { id: "other", label: "Other reason", icon: "ellipsis-horizontal" },
 ];
 
+const DEACTIVATION_DURATIONS = [
+    { id: "3", label: "3 days", days: 3 },
+    { id: "7", label: "1 week", days: 7 },
+    { id: "14", label: "2 weeks", days: 14 },
+    { id: "30", label: "1 month", days: 30 },
+    { id: "90", label: "3 months", days: 90 },
+    { id: "custom", label: "Custom days", days: null },
+];
+
 const AdminUsers = () => {
     const [users, setUsers] = useState([]);
     const [filtered, setFiltered] = useState([]);
@@ -40,6 +51,8 @@ const AdminUsers = () => {
     const [selectedReason, setSelectedReason] = useState("");
     const [customReason, setCustomReason] = useState("");
     const [showCustomInput, setShowCustomInput] = useState(false);
+    const [selectedDurationId, setSelectedDurationId] = useState("7");
+    const [customDurationDays, setCustomDurationDays] = useState("");
 
     const fetchUsers = useCallback(async (silent = false) => {
         if (!silent) setLoading(true);
@@ -76,6 +89,8 @@ const AdminUsers = () => {
         setSelectedReason("");
         setCustomReason("");
         setShowCustomInput(false);
+        setSelectedDurationId("7");
+        setCustomDurationDays("");
         setDeactivateModal({ visible: true, userId, userName });
     };
 
@@ -84,6 +99,8 @@ const AdminUsers = () => {
         setSelectedReason("");
         setCustomReason("");
         setShowCustomInput(false);
+        setSelectedDurationId("7");
+        setCustomDurationDays("");
     };
 
     const handleReasonSelect = (reasonId) => {
@@ -105,6 +122,24 @@ const AdminUsers = () => {
             return;
         }
 
+        let durationDays = null;
+        if (selectedDurationId === "custom") {
+            const parsed = Number(customDurationDays);
+            if (!Number.isInteger(parsed) || parsed <= 0) {
+                Alert.alert("Error", "Please provide a valid custom duration in days");
+                return;
+            }
+            durationDays = parsed;
+        } else {
+            const picked = DEACTIVATION_DURATIONS.find((d) => d.id === selectedDurationId);
+            durationDays = picked?.days || null;
+        }
+
+        if (!durationDays) {
+            Alert.alert("Error", "Please select a deactivation duration");
+            return;
+        }
+
         const { userId, userName } = deactivateModal;
         const reasonText = selectedReason === "other" 
             ? customReason.trim() 
@@ -117,18 +152,22 @@ const AdminUsers = () => {
             const token = await getJwt();
             await axios.patch(
                 `${baseURL}users/${userId}/deactivate`,
-                { reason: reasonText },
+                { reason: reasonText, durationDays },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
+
+            const deactivatedUntil = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
             
             const update = (arr) =>
                 arr.map((u) =>
-                    (u.id || u._id) === userId ? { ...u, isActive: false, deactivationReason: reasonText } : u
+                    (u.id || u._id) === userId
+                        ? { ...u, isActive: false, deactivationReason: reasonText, deactivatedUntil }
+                        : u
                 );
             setUsers((prev) => update(prev));
             setFiltered((prev) => update(prev));
             
-            Alert.alert("Success", `${userName} has been deactivated`);
+            Alert.alert("Success", `${userName} has been deactivated for ${durationDays} day(s)`);
         } catch (e) {
             Alert.alert("Error", e.response?.data?.message || "Deactivation failed");
         } finally {
@@ -156,7 +195,9 @@ const AdminUsers = () => {
             
             const update = (arr) =>
                 arr.map((u) =>
-                    (u.id || u._id) === userId ? { ...u, isActive: true, deactivationReason: null } : u
+                    (u.id || u._id) === userId
+                        ? { ...u, isActive: true, deactivationReason: null, deactivatedUntil: null }
+                        : u
                 );
             setUsers((prev) => update(prev));
             setFiltered((prev) => update(prev));
@@ -231,6 +272,13 @@ const AdminUsers = () => {
                             <Text style={styles.reasonText}>Reason: {item.deactivationReason}</Text>
                         </View>
                     )}
+
+                    {isInactive && item.deactivatedUntil && (
+                        <View style={styles.reasonContainer}>
+                            <Ionicons name="time-outline" size={14} color="#f97316" />
+                            <Text style={styles.reasonText}>Until: {new Date(item.deactivatedUntil).toLocaleDateString()}</Text>
+                        </View>
+                    )}
                     
                     {!item.isAdmin && (
                         <View style={styles.actionRow}>
@@ -279,82 +327,132 @@ const AdminUsers = () => {
                 <View style={styles.modalOverlay}>
                     <TouchableWithoutFeedback onPress={() => {}}>
                         <View style={styles.modalContent}>
-                            <View style={styles.modalHeader}>
-                                <View style={styles.modalIconContainer}>
-                                    <Ionicons name="alert-circle" size={30} color="#f97316" />
-                                </View>
-                                <Text style={styles.modalTitle}>Deactivate User</Text>
-                                <Text style={styles.modalSubtitle}>
-                                    {deactivateModal.userName}
-                                </Text>
-                                <TouchableOpacity 
-                                    style={styles.modalCloseBtn}
-                                    onPress={closeDeactivateModal}
-                                >
-                                    <Ionicons name="close" size={20} color="#666" />
-                                </TouchableOpacity>
-                            </View>
-
-                            <Text style={styles.reasonLabel}>Select reason for deactivation:</Text>
-
-                            <RadioButton.Group onValueChange={handleReasonSelect} value={selectedReason}>
-                                {DEACTIVATION_REASONS.map((reason) => (
+                            <ScrollView
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={styles.modalScrollContent}
+                            >
+                                <View style={styles.modalHeader}>
+                                    <View style={styles.modalIconContainer}>
+                                        <Ionicons name="alert-circle" size={30} color="#f97316" />
+                                    </View>
+                                    <Text style={styles.modalTitle}>Deactivate User</Text>
+                                    <Text style={styles.modalSubtitle}>
+                                        {deactivateModal.userName}
+                                    </Text>
                                     <TouchableOpacity
-                                        key={reason.id}
-                                        style={styles.reasonOption}
-                                        onPress={() => handleReasonSelect(reason.id)}
+                                        style={styles.modalCloseBtn}
+                                        onPress={closeDeactivateModal}
                                     >
-                                        <View style={styles.reasonLeft}>
-                                            <Ionicons 
-                                                name={reason.icon} 
-                                                size={20} 
-                                                color={selectedReason === reason.id ? "#7c3aed" : "#888"} 
-                                            />
-                                            <Text style={[
-                                                styles.reasonOptionText,
-                                                selectedReason === reason.id && styles.selectedReasonText
-                                            ]}>
-                                                {reason.label}
-                                            </Text>
-                                        </View>
-                                        <RadioButton.Android 
-                                            value={reason.id} 
-                                            color="#7c3aed"
-                                            uncheckedColor="#ccc"
-                                        />
+                                        <Ionicons name="close" size={20} color="#666" />
                                     </TouchableOpacity>
-                                ))}
-                            </RadioButton.Group>
-
-                            {showCustomInput && (
-                                <View style={styles.customInputContainer}>
-                                    <Text style={styles.customInputLabel}>Please specify:</Text>
-                                    <TextInput
-                                        style={styles.customInput}
-                                        placeholder="Enter reason..."
-                                        value={customReason}
-                                        onChangeText={setCustomReason}
-                                        multiline
-                                        numberOfLines={3}
-                                    />
                                 </View>
-                            )}
 
-                            <View style={styles.modalButtons}>
-                                <TouchableOpacity
-                                    style={[styles.modalBtn, styles.cancelBtn]}
-                                    onPress={closeDeactivateModal}
-                                >
-                                    <Text style={styles.cancelBtnText}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.modalBtn, styles.confirmBtn]}
-                                    onPress={confirmDeactivate}
-                                >
-                                    <Ionicons name="ban" size={16} color="#fff" style={{ marginRight: 5 }} />
-                                    <Text style={styles.confirmBtnText}>Deactivate</Text>
-                                </TouchableOpacity>
-                            </View>
+                                <Text style={styles.reasonLabel}>Select reason for deactivation:</Text>
+
+                                <RadioButton.Group onValueChange={handleReasonSelect} value={selectedReason}>
+                                    {DEACTIVATION_REASONS.map((reason) => (
+                                        <TouchableOpacity
+                                            key={reason.id}
+                                            style={styles.reasonOption}
+                                            onPress={() => handleReasonSelect(reason.id)}
+                                        >
+                                            <View style={styles.reasonLeft}>
+                                                <Ionicons
+                                                    name={reason.icon}
+                                                    size={20}
+                                                    color={selectedReason === reason.id ? "#7c3aed" : "#888"}
+                                                />
+                                                <Text style={[
+                                                    styles.reasonOptionText,
+                                                    selectedReason === reason.id && styles.selectedReasonText
+                                                ]}>
+                                                    {reason.label}
+                                                </Text>
+                                            </View>
+                                            <RadioButton.Android
+                                                value={reason.id}
+                                                color="#7c3aed"
+                                                uncheckedColor="#ccc"
+                                            />
+                                        </TouchableOpacity>
+                                    ))}
+                                </RadioButton.Group>
+
+                                {showCustomInput && (
+                                    <View style={styles.customInputContainer}>
+                                        <Text style={styles.customInputLabel}>Please specify:</Text>
+                                        <TextInput
+                                            style={styles.customInput}
+                                            placeholder="Enter reason..."
+                                            value={customReason}
+                                            onChangeText={setCustomReason}
+                                            multiline
+                                            numberOfLines={3}
+                                        />
+                                    </View>
+                                )}
+
+                                <Text style={[styles.reasonLabel, { marginTop: 14 }]}>Select deactivation duration:</Text>
+                                <RadioButton.Group onValueChange={setSelectedDurationId} value={selectedDurationId}>
+                                    {DEACTIVATION_DURATIONS.map((duration) => (
+                                        <TouchableOpacity
+                                            key={duration.id}
+                                            style={styles.reasonOption}
+                                            onPress={() => setSelectedDurationId(duration.id)}
+                                        >
+                                            <View style={styles.reasonLeft}>
+                                                <Ionicons
+                                                    name="time"
+                                                    size={20}
+                                                    color={selectedDurationId === duration.id ? "#7c3aed" : "#888"}
+                                                />
+                                                <Text
+                                                    style={[
+                                                        styles.reasonOptionText,
+                                                        selectedDurationId === duration.id && styles.selectedReasonText,
+                                                    ]}
+                                                >
+                                                    {duration.label}
+                                                </Text>
+                                            </View>
+                                            <RadioButton.Android
+                                                value={duration.id}
+                                                color="#7c3aed"
+                                                uncheckedColor="#ccc"
+                                            />
+                                        </TouchableOpacity>
+                                    ))}
+                                </RadioButton.Group>
+
+                                {selectedDurationId === "custom" && (
+                                    <View style={styles.customInputContainer}>
+                                        <Text style={styles.customInputLabel}>Custom duration in days:</Text>
+                                        <TextInput
+                                            style={styles.customInput}
+                                            placeholder="Enter number of days"
+                                            value={customDurationDays}
+                                            onChangeText={setCustomDurationDays}
+                                            keyboardType="numeric"
+                                        />
+                                    </View>
+                                )}
+
+                                <View style={styles.modalButtons}>
+                                    <TouchableOpacity
+                                        style={[styles.modalBtn, styles.cancelBtn]}
+                                        onPress={closeDeactivateModal}
+                                    >
+                                        <Text style={styles.cancelBtnText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.modalBtn, styles.confirmBtn]}
+                                        onPress={confirmDeactivate}
+                                    >
+                                        <Ionicons name="ban" size={16} color="#fff" style={{ marginRight: 5 }} />
+                                        <Text style={styles.confirmBtnText}>Deactivate</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </ScrollView>
                         </View>
                     </TouchableWithoutFeedback>
                 </View>
@@ -469,8 +567,12 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         width: "90%",
         maxWidth: 400,
+        maxHeight: "90%",
         padding: 20,
         elevation: 5,
+    },
+    modalScrollContent: {
+        paddingBottom: 8,
     },
     modalHeader: {
         alignItems: "center",

@@ -24,6 +24,14 @@ const ACCOUNT_ACTION_REASONS = [
     "Other",
 ];
 
+const DEACTIVATION_DURATION_OPTIONS = [
+    { label: "3 days", value: 3 },
+    { label: "1 week", value: 7 },
+    { label: "2 weeks", value: 14 },
+    { label: "1 month", value: 30 },
+    { label: "3 months", value: 90 },
+];
+
 const REGION_CITY_OPTIONS = {
     "Metro Manila": ["Manila", "Quezon City", "Makati", "Pasig", "Taguig", "Mandaluyong"],
     "CALABARZON": ["Antipolo", "Calamba", "Bacoor", "Dasmarinas", "Lipa"],
@@ -59,6 +67,7 @@ const UserProfile = () => {
     const [showAccountActionModal, setShowAccountActionModal] = useState(false);
     const [showReasonModal, setShowReasonModal] = useState(false);
     const [pendingAccountAction, setPendingAccountAction] = useState("");
+    const [deactivationDurationDays, setDeactivationDurationDays] = useState(7);
     const [isEditingName, setIsEditingName] = useState(false);
     const [isEditingPhone, setIsEditingPhone] = useState(false);
     const [isEditingAddress, setIsEditingAddress] = useState(false);
@@ -262,12 +271,15 @@ const UserProfile = () => {
             }
 
             if (type === "deactivate") {
-                await axios.patch(
+                const response = await axios.patch(
                     `${baseURL}users/me/deactivate`,
-                    { reason: accountActionReason },
+                    { reason: accountActionReason, durationDays: deactivationDurationDays },
                     { headers: { Authorization: `Bearer ${jwt}` } }
                 );
-                Toast.show({ topOffset: 60, type: "success", text1: "Account deactivated" });
+                const untilText = response?.data?.deactivatedUntil
+                    ? `until ${new Date(response.data.deactivatedUntil).toLocaleDateString()}`
+                    : `for ${deactivationDurationDays} day(s)`;
+                Toast.show({ topOffset: 60, type: "success", text1: "Account deactivated", text2: untilText });
             } else {
                 await axios.delete(`${baseURL}users/me`, {
                     headers: { Authorization: `Bearer ${jwt}` },
@@ -291,12 +303,17 @@ const UserProfile = () => {
     const openReasonModalForAction = (type) => {
         setPendingAccountAction(type);
         setAccountActionReason(ACCOUNT_ACTION_REASONS[0]);
+        setDeactivationDurationDays(7);
         setShowAccountActionModal(false);
         setShowReasonModal(true);
     };
 
     const confirmAccountActionWithReason = () => {
         if (!pendingAccountAction) return;
+        if (pendingAccountAction === "deactivate" && (!Number.isInteger(deactivationDurationDays) || deactivationDurationDays <= 0)) {
+            Toast.show({ topOffset: 60, type: "error", text1: "Please select a valid deactivation duration" });
+            return;
+        }
         setShowReasonModal(false);
         performAccountAction(pendingAccountAction);
     };
@@ -628,12 +645,39 @@ const UserProfile = () => {
                         </Text>
 
                         <View style={styles.accountReasonPickerWrap}>
-                            <Picker selectedValue={accountActionReason} onValueChange={setAccountActionReason}>
+                            <Picker
+                                selectedValue={accountActionReason}
+                                onValueChange={setAccountActionReason}
+                                style={styles.modalPicker}
+                                dropdownIconColor={COLORS.textDark}
+                            >
                                 {ACCOUNT_ACTION_REASONS.map((reason) => (
                                     <Picker.Item key={reason} label={reason} value={reason} />
                                 ))}
                             </Picker>
                         </View>
+
+                        {pendingAccountAction === "deactivate" && (
+                            <>
+                                <Text style={[styles.modalSubtitle, { marginTop: 4 }]}>How long should the deactivation last?</Text>
+                                <View style={styles.accountReasonPickerWrap}>
+                                    <Picker
+                                        selectedValue={deactivationDurationDays}
+                                        onValueChange={setDeactivationDurationDays}
+                                        style={styles.modalPicker}
+                                        dropdownIconColor={COLORS.textDark}
+                                    >
+                                        {DEACTIVATION_DURATION_OPTIONS.map((duration) => (
+                                            <Picker.Item
+                                                key={String(duration.value)}
+                                                label={duration.label}
+                                                value={duration.value}
+                                            />
+                                        ))}
+                                    </Picker>
+                                </View>
+                            </>
+                        )}
 
                         <View style={styles.modalActionsRow}>
                             <TouchableOpacity

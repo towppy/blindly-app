@@ -48,6 +48,19 @@ export const loginUser = (user, dispatch, reduxDispatch) => {
                     // Don't call logoutUser — no session exists yet
                 });
             }
+            if (res.status === 404) {
+                return res.json().then((data) => {
+                    if (data?.code === "ACCOUNT_NOT_REGISTERED") {
+                        Toast.show({
+                            topOffset: 60,
+                            type: "error",
+                            text1: "No account with this email",
+                            text2: "Please register again before logging in.",
+                        });
+                        return;
+                    }
+                });
+            }
             return res.json().then(async (data) => {
                 if (data && data.token) {
                     const token = data.token;

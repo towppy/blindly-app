@@ -34,6 +34,7 @@ phone: { type: String, required: false, default: '', trim: true },
     accountStatus: { type: String, enum: ["active", "deactivated", "deleted"], default: "active" },
     accountStatusReason: { type: String, default: "" },
     accountStatusUpdatedAt: { type: Date, default: null },
+    deactivatedUntil: { type: Date, default: null },
     firebaseUid: { type: String, default: null },
   },
   { timestamps: true }

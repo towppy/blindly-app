@@ -72,7 +72,6 @@ const ProductContainer = () => {
         try {
             const availableRes = await axios.get(`${baseURL}vouchers/available`);
             const voucherData = availableRes.data || [];
-            console.log("Vouchers fetched:", voucherData.length); // debug
             setVouchers(voucherData);
 
             if (isAuthenticated) {
@@ -81,7 +80,7 @@ const ProductContainer = () => {
                     headers: { Authorization: `Bearer ${token || ""}` },
                 });
                 const activeClaims = (claimedRes.data || [])
-                    .filter((claim) => claim.status === "claimed" && claim.voucher)
+                    .filter((claim) => Boolean(claim?.voucher))
                     .map((claim) => String(claim.voucher.id || claim.voucher._id));
                 setClaimedVoucherIds(new Set(activeClaims));
             } else {

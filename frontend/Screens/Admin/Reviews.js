@@ -128,11 +128,17 @@ const Reviews = () => {
                 <TextInput
                     style={styles.searchInput}
                     placeholder="Search by product, user, or comment"
+                    placeholderTextColor="#8e84b6"
                     value={search}
                     onChangeText={setSearch}
                 />
                 <View style={styles.ratingPickerWrap}>
-                    <Picker selectedValue={ratingFilter} onValueChange={setRatingFilter}>
+                    <Picker
+                        selectedValue={ratingFilter}
+                        onValueChange={setRatingFilter}
+                        style={styles.picker}
+                        dropdownIconColor="#5b21b6"
+                    >
                         <Picker.Item label="All ratings" value="all" />
                         <Picker.Item label="5 stars" value="5" />
                         <Picker.Item label="4 stars" value="4" />
@@ -142,7 +148,12 @@ const Reviews = () => {
                     </Picker>
                 </View>
                 <View style={styles.ratingPickerWrap}>
-                    <Picker selectedValue={categoryFilter} onValueChange={setCategoryFilter}>
+                    <Picker
+                        selectedValue={categoryFilter}
+                        onValueChange={setCategoryFilter}
+                        style={styles.picker}
+                        dropdownIconColor="#5b21b6"
+                    >
                         <Picker.Item label="All categories" value="all" />
                         {categoryOptions
                             .filter((c) => c !== "all")
@@ -207,7 +218,12 @@ const Reviews = () => {
                     <Text style={styles.modalTitle}>Delete Review</Text>
                     <Text style={styles.modalText}>Select a reason for deleting this review:</Text>
                     <View style={styles.reasonPickerWrap}>
-                        <Picker selectedValue={deleteReason} onValueChange={setDeleteReason}>
+                        <Picker
+                            selectedValue={deleteReason}
+                            onValueChange={setDeleteReason}
+                            style={styles.picker}
+                            dropdownIconColor="#5b21b6"
+                        >
                             {DELETE_REASONS.map((reason) => (
                                 <Picker.Item key={reason} label={reason} value={reason} />
                             ))}
@@ -239,6 +255,7 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         paddingHorizontal: 12,
         paddingVertical: 10,
+        color: "#1a1235",
     },
     ratingPickerWrap: {
         backgroundColor: "#fff",
@@ -246,6 +263,10 @@ const styles = StyleSheet.create({
         borderColor: "#e8e8e8",
         borderRadius: 10,
         overflow: "hidden",
+    },
+    picker: {
+        color: "#1a1235",
+        backgroundColor: "#fff",
     },
     tableScroll: { marginBottom: 10 },
     tableCard: {

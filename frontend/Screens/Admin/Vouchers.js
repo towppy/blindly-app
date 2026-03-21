@@ -512,6 +512,8 @@ const Vouchers = () => {
                                 <Picker
                                     selectedValue={voucherForm.appliesTo}
                                     onValueChange={(value) => setVoucherForm((s) => ({ ...s, appliesTo: value }))}
+                                    style={styles.picker}
+                                    dropdownIconColor="#3d2c8d"
                                 >
                                     <Picker.Item label="All Items" value="all" />
                                     <Picker.Item label="By Category" value="category" />
@@ -525,6 +527,8 @@ const Vouchers = () => {
                                         <Picker
                                             selectedValue={voucherForm.category}
                                             onValueChange={(value) => setVoucherForm((s) => ({ ...s, category: value }))}
+                                            style={styles.picker}
+                                            dropdownIconColor="#3d2c8d"
                                         >
                                             <Picker.Item label="Select category" value="" />
                                             {categories.map((c) => (
@@ -569,6 +573,8 @@ const Vouchers = () => {
                                 <Picker
                                     selectedValue={promoForm.product}
                                     onValueChange={(value) => setPromoForm((s) => ({ ...s, product: value }))}
+                                    style={styles.picker}
+                                    dropdownIconColor="#3d2c8d"
                                 >
                                     <Picker.Item label="Select product" value="" />
                                     {products.map((p) => (
@@ -689,9 +695,11 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         paddingHorizontal: 10,
         paddingVertical: 10,
+        color: "#1a1235",
     },
     textArea: { minHeight: 80, textAlignVertical: "top" },
     pickerWrap: { backgroundColor: "#fff", borderRadius: 8, borderWidth: 1, borderColor: "#e6e0f5" },
+    picker: { color: "#1a1235", backgroundColor: "#fff" },
     imageRow: {
         flexDirection: "row",
         alignItems: "center",

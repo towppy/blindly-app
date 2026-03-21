@@ -389,6 +389,10 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.white,
         overflow: "hidden",
     },
+    modalPicker: {
+        color: COLORS.textDark,
+        backgroundColor: COLORS.white,
+    },
     deactivateAccountBtn: {
         marginTop: 12,
         flexDirection: "row",

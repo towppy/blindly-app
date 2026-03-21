@@ -167,6 +167,29 @@ function toBoolean(value) {
   return false;
 }
 
+function parseDurationDays(value) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+  // Cap duration to 10 years to avoid accidental overflow.
+  if (parsed > 3650) {
+    return null;
+  }
+  return parsed;
+}
+
+function computeDeactivatedUntil(durationDays) {
+  return new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
+}
+
+function buildDeactivationMessage(user) {
+  if (user?.deactivatedUntil) {
+    return `Your account has been deactivated until ${new Date(user.deactivatedUntil).toLocaleString()}.`;
+  }
+  return "Your account has been deactivated. Please contact support.";
+}
+
 router.post("/register", upload.single("image"), async (req, res) => {
   try {
     // Log Firebase project ID to confirm correct project
@@ -258,7 +281,10 @@ router.post("/login", async (req, res) => {
     // Try to get user from MongoDB
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(404).json({
+        message: "There is no account with that email. Please register again.",
+        code: "ACCOUNT_NOT_REGISTERED",
+      });
     }
 
     // Try to verify credentials with Firebase Authentication
@@ -290,7 +316,22 @@ router.post("/login", async (req, res) => {
     }
 
     if (user.isActive === false) {
-      return res.status(403).json({ message: "Your account has been deactivated. Please contact support." });
+      const now = new Date();
+      const hasExpiredDeactivation =
+        user.deactivatedUntil instanceof Date &&
+        Number.isFinite(user.deactivatedUntil.getTime()) &&
+        user.deactivatedUntil <= now;
+
+      if (hasExpiredDeactivation) {
+        user.isActive = true;
+        user.accountStatus = "active";
+        user.accountStatusReason = "";
+        user.accountStatusUpdatedAt = now;
+        user.deactivatedUntil = null;
+        await user.save();
+      } else {
+        return res.status(403).json({ message: buildDeactivationMessage(user) });
+      }
     }
 
     const payload = {
@@ -613,28 +654,59 @@ router.get("/", authJwt, async (req, res) => {
 });
 
 // PATCH /users/:id/deactivate — admin only
-router.patch("/:id/deactivate", authJwt, async (req, res) => {
+router.patch("/:id([0-9a-fA-F]{24})/deactivate", authJwt, async (req, res) => {
   try {
     if (!req.user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
-    const reason = req.body?.reason || '';
-    const user = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+    const reason = String(req.body?.reason || "").trim();
+    const durationDays = parseDurationDays(req.body?.durationDays);
+    if (!durationDays) {
+      return res.status(400).json({ message: "durationDays must be a positive whole number" });
+    }
+
+    const deactivatedUntil = computeDeactivatedUntil(durationDays);
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      {
+        isActive: false,
+        accountStatus: "deactivated",
+        accountStatusReason: reason,
+        accountStatusUpdatedAt: new Date(),
+        deactivatedUntil,
+      },
+      { new: true }
+    );
     if (!user) return res.status(404).json({ message: "User not found" });
     try {
       await sendAccountStatusEmail({ user, action: "deactivate", reason });
     } catch (mailErr) {
       console.error("[Deactivate] Email send error:", mailErr.message);
     }
-    return res.status(200).json({ success: true, isActive: false });
+    return res.status(200).json({
+      success: true,
+      isActive: false,
+      durationDays,
+      deactivatedUntil,
+    });
   } catch (_err) {
     return res.status(500).json({ message: "Failed to deactivate user" });
   }
 });
 
 // PATCH /users/:id/activate — admin only
-router.patch("/:id/activate", authJwt, async (req, res) => {
+router.patch("/:id([0-9a-fA-F]{24})/activate", authJwt, async (req, res) => {
   try {
     if (!req.user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
-    const user = await User.findByIdAndUpdate(req.params.id, { isActive: true }, { new: true });
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      {
+        isActive: true,
+        accountStatus: "active",
+        accountStatusReason: "",
+        accountStatusUpdatedAt: new Date(),
+        deactivatedUntil: null,
+      },
+      { new: true }
+    );
     if (!user) return res.status(404).json({ message: "User not found" });
     return res.status(200).json({ success: true, isActive: true });
   } catch (_err) {
@@ -642,18 +714,23 @@ router.patch("/:id/activate", authJwt, async (req, res) => {
   }
 });
 
-// DELETE /users/:id — admin only, soft delete (sets isActive: false)
-router.delete("/:id", authJwt, async (req, res) => {
+// DELETE /users/:id — admin only, hard delete from database
+router.delete("/:id([0-9a-fA-F]{24})", authJwt, async (req, res) => {
   try {
     if (!req.user?.isAdmin) return res.status(403).json({ message: "Admin access required" });
-    const reason = req.body?.reason || '';
-    const user = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+    const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
-    try {
-      await sendAccountStatusEmail({ user, action: "delete", reason });
-    } catch (mailErr) {
-      console.error("[Delete] Email send error:", mailErr.message);
+
+    if (user.firebaseUid) {
+      try {
+        await firebaseAdmin.auth().deleteUser(user.firebaseUid);
+      } catch (fbErr) {
+        console.error("[Delete] Firebase delete error:", fbErr.message);
+      }
     }
+
+    await User.findByIdAndDelete(req.params.id);
+
     return res.status(200).json({ success: true });
   } catch (_err) {
     return res.status(500).json({ message: "Failed to delete user" });
@@ -703,6 +780,12 @@ router.patch("/me/deactivate", authJwt, async (req, res) => {
     if (!reason) {
       return res.status(400).json({ message: "Reason is required" });
     }
+    const durationDays = parseDurationDays(req.body?.durationDays);
+    if (!durationDays) {
+      return res.status(400).json({ message: "durationDays must be a positive whole number" });
+    }
+
+    const deactivatedUntil = computeDeactivatedUntil(durationDays);
 
     const user = await User.findByIdAndUpdate(
       req.user.userId,
@@ -711,6 +794,7 @@ router.patch("/me/deactivate", authJwt, async (req, res) => {
         accountStatus: "deactivated",
         accountStatusReason: reason,
         accountStatusUpdatedAt: new Date(),
+        deactivatedUntil,
         pushTokens: [],
       },
       { new: true }
@@ -720,7 +804,12 @@ router.patch("/me/deactivate", authJwt, async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    return res.status(200).json({ success: true, status: "deactivated" });
+    return res.status(200).json({
+      success: true,
+      status: "deactivated",
+      durationDays,
+      deactivatedUntil,
+    });
   } catch (_err) {
     return res.status(500).json({ message: "Failed to deactivate account" });
   }
@@ -921,6 +1010,25 @@ router.post('/google-login', async (req, res) => {
       user.emailVerificationTokenHash = null;
       user.emailVerificationExpiresAt = null;
       await user.save();
+    }
+
+    if (user.isActive === false) {
+      const now = new Date();
+      const hasExpiredDeactivation =
+        user.deactivatedUntil instanceof Date &&
+        Number.isFinite(user.deactivatedUntil.getTime()) &&
+        user.deactivatedUntil <= now;
+
+      if (hasExpiredDeactivation) {
+        user.isActive = true;
+        user.accountStatus = "active";
+        user.accountStatusReason = "";
+        user.accountStatusUpdatedAt = now;
+        user.deactivatedUntil = null;
+        await user.save();
+      } else {
+        return res.status(403).json({ message: buildDeactivationMessage(user) });
+      }
     }
 
     // Issue JWT
