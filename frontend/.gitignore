@@ -1,6 +1,13 @@
 node_modules/
 .expo/
 
+# Android local/generated artifacts (must not be committed)
+android/.gradle/
+android/build/
+android/app/build/
+android/.cxx/
+android/local.properties
+
 # Firebase Android config — contains your project credentials
 google-services.json
 
